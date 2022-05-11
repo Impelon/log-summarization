@@ -1,0 +1,12 @@
+# log summarization
+transformers[torch,sentencepiece]==4.16.2
+setuptools==59.5.0 # workaround for bug with torch 1.10; See https://stackoverflow.com/questions/70520120/attributeerror-module-setuptools-distutils-has-no-attribute-version
+numpy>=1.19
+nltk==3.6.7
+rouge-score==0.0.4
+git+https://github.com/neural-dialogue-metrics/rouge.git # simpler and much faster ROUGE-implementation; without it the GSG-objective is impractibly slow
+# tracesviz
+natsort[fast]==7.1.1
+pydot==1.4.2
+# progress indicator
+tqdm==4.62.2

@@ -1,0 +1,5 @@
+{
+    "category": ["WordCount", "Machine down"],
+    "group-by-columns": ["File"],
+    "partition-minimum-size": 200
+}

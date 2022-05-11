@@ -1,0 +1,35 @@
+\chapter{Conclusion}\label{ch:conclusion}
+
+\acresetall
+
+% 0.75 - 1 page. What have we learned in/through this thesis?
+
+In this thesis, we proposed using pre-trained \ac{nlp} models to create textual summaries of logs.
+Our assemption is that summarizing logs can speed up the manual analysis of log data and
+that such models may be able to generalize to other tasks concerning log analysis.
+This idea of \emph{log summarization} is relatively new; hence only few prior works have been conducted in this domain.
+Furthermore, we proposed two different ways to construct reference summaries for log datasets semi-automatically.
+
+We conducted an extensive evaluation, testing different aspects that could influence the performance of models,
+and ultimately highlighted multiple challenges one faces when applying language models previously pre-trained on other domains, among which:
+The need to introduce adequate separators between individual log messages,
+the difference from other summarization domains, and the heterogeneous nature of systems and their logs.
+Factors like these make the problem of summarization different in every dataset.
+
+Our results are mixed:
+While our best-performing models were able to outperform the previous state-of-the-art log summarization framework on manually written summaries,
+we believe our own proposed datasets require further improvements to be helpful for the evaluation of summarization approaches.
+Here, our models are not precise enough to identify many problematic parts of a log
+and significantly facilitate human operators' work.
+
+We suggest that future work should not only concentrate on developing new approaches to summarize of logs;
+rather, an in-depth examination of a multitude of different log datasets is needed.
+As research in this area is very sparse,
+we are unaware of any comprehensive analyses regarding the biases present in log-data that one should consider when training \ac{nlp} models,
+nor any user studies assessing the value of textual summaries.
+
+Nevertheless, we believe our approach represents a successful proof of concept:
+To our knowledge, it is one of the first applications of abstractive \acl{seq2seq} models in the domain of analyzing logs.
+We demonstrate that pre-trained models are able to quickly adapt to many log summarization datasets with the help of supervised fine-tuning.
+Modern \acl{seq2seq} models can correctly reproduce log-data
+and are able to identify a part of the relevant information contained in logs.

@@ -1,0 +1,1131 @@
+\chapter{Contribution}\label{ch:contribution}
+
+\acresetall
+
+% Most important chapter of the thesis. Describes what the author contributes as research.
+% Discusses intuition, motivation, describes and reasons about necessity of proposed elements.
+% Defines theses based on reasonable assumptions. Discusses relevant aspects of contribution.
+% Approximately 15 to 20 pages. Can be split into multiple chapters.
+
+We first explain some concepts surrounding logs and
+the processing of log-data (\autoref{sec:logging_systems}).
+Using these basics, we define summarization tasks that serve as the foundation of our experiments (\autoref{sec:summarization_tasks}).
+Afterward, we present the models we use for summarization (\autoref{sec:summary_models})
+and give an in-depth overview of our approach (\autoref{sec:approach}).
+In the final sections of this chapter, we explain the commonly used cross-entropy
+as a function to optimize during training and how to interpret the related perplexity (\autoref{sec:perplexity}).
+We end with a brief explanation of how beam-search is employed to generate text,
+as well as the concept of a hyperparameter search (\autoref{sec:beam_search}).
+
+\section{Logging Systems and Log Parsing}\label{sec:logging_systems}
+
+In its simplest form, a log is a text file to which a software system writes arbitrary messages
+with the goal to record information about its state and activities.
+The process of keeping logs is known as \emph{logging},
+while we will refer to the part of the software managing the logging operation as a \emph{logging-system}.
+Most general-purpose logs represent unstructured text designed by developers to be human-readable,
+making it hard for computers to understand these free-text messages~\parencite{log_analysis}.
+
+Since the system decides which information is included in a log and how it is formatted,
+programs analyzing log-data usually have to be individually configured for each system.
+
+Nevertheless, different logging-systems generally exhibit some common properties
+that can be leveraged for automated log analysis.
+This is also illustrated using a hypothetical example in \autoref{fig:log_parsing}:
+An application first makes a call to its logging-system,
+which will fill in \emph{parameters} into given \emph{templates} to produce a plain text message (\emph{log message})
+and add additional metadata such as timestamps, the ID of the executing thread or software-components issuing the log message,
+finally outputting the log-entry.
+In a sense, log parsers try to undo this process, usually by first separating metadata from the log message.
+
+From a log parser's perspective,
+logs consist of \emph{log-entries}, each usually contained in its own line and formatted in a predictable manner.
+These entries contain a plain text message (\emph{log message}) as well as some metadata;
+parsers are able to use the underlying patterns of log-entries and
+extract the information into a structured format, such as CSV or JSON.
+Additionally, in a process called \emph{log abstraction},
+parsers separate static parts (\emph{templates})
+from dynamic parts (\emph{parameters}) of the log message,
+categorizing log-entries by the static parts and thus assigning each log-entry to a \emph{log event}~\parencite[654]{logpai_logparser_evaluation}.
+
+\begin{figure}[tb]
+\begin{tikzpicture}[
+  block/.style={text width=.9\columnwidth, minimum height=2.1\baselineskip, draw, thick, fill=gray!10},
+  description/.style={text width=.1\columnwidth},
+  every node/.style={font={\scriptsize}},
+]
+\node[block] (application)
+{\lstinline[language=Python]+logger.warning("Protocol error (peer %s): %s", 5, "socket closed")+};
+\node[description] [right = 0 of application] {application};
+\node[block] (logentry) [below = 1 of application]
+{\verb+23-01 21:23:12 112 WARN NetworkManager: Protocol error (peer 5): socket closed+};
+\node[description] [right = 0 of logentry] {log-entry};
+\node[block] (strucentry) [below = 1 of logentry]
+{\resizebox{\textwidth}{!}{\ttfamily\begin{tabular}{cccccc}
+Date  &Time     &Thread &Level &Component      &Message\\
+\midrule
+23-01 &21:23:12 &112    &WARN  &NetworkManager &Protocol error (peer 5): socket closed
+\end{tabular}}};
+\node[description] [right = 0 of strucentry] {structured\\log-entry};
+\node[block] (structemplate) [below = 1 of strucentry]
+{\resizebox{\textwidth}{!}{\ttfamily\begin{tabular}{cccccccc}
+Date  &Time     &Thread &Level &Component      &Template                        &Parameters\\
+\midrule
+23-01 &21:23:12 &112    &WARN  &NetworkManager &Protocol error (peer <*>): <*> &["5", "socket closed"]
+\end{tabular}}};
+\node[description] [right = 0 of structemplate] {structured\\log-entry with\\log event};
+\draw[-{Latex}] (application) -- node[right] {logging-system} (logentry);
+\draw[-{Latex}] (logentry) -- node[right] {parsing (structure data / separate metadata)} (strucentry);
+\draw[-{Latex}] (strucentry) -- node[right] {parsing (log abstraction)} (structemplate);
+\end{tikzpicture}
+\caption{Example of how applications produce logs and how parsers can structure the contained information.}
+\label{fig:log_parsing}
+\end{figure}
+
+We leverage the existing technology of log abstraction to determine log-entries
+with similar meaning as represented by log events,
+which play a central role in the log summarization task we propose.
+
+\section{Summarization Tasks}\label{sec:summarization_tasks}
+
+A program with the ability to extract the most important and impactful log-entries
+within a group of log-entries, would construct a summary of said log-entries.
+This is the approach we will refer to as \emph{log summarization}.
+
+While standardized tasks and datasets exist for text summarization in general,%
+\footnote{For example XSum~\parencite{xsum} and
+CNN/DailyMail~\parencite{cnn_dailymail} represent summarization datasets
+constructed from large news corpora.
+For a list of datasets and benchmarks see \url{https://paperswithcode.com/task/text-summarization}.}
+the same cannot be said for the summarization of log-data.
+
+Such a summarization task seems necessary to train or fine-tune performant models;
+Even more so as it seems plausible that log-data is linguistically different from news corpora
+and other domains that are frequently used in summarization benchmarks.
+Texts in log-entries often do not form complete sentences,
+may be unrelated to surrounding log-entries as opposed to continuous text,
+and may contain additional metadata.
+Furthermore, evaluating summarization results without a dataset containing reference summaries is not practical
+as the quality of model outputs can then only be manually judged by \emph{system experts} (developers, operators, maintainers, \ldots{}).
+
+Previous work related to producing summaries of log-data relied on manually written summaries;
+\citeauthor*{log_summary} summarize 100 groups of 20 successive log-entries per dataset~\parencite[6]{log_summary}.
+However, writing summaries for logs manually requires knowledge about the system,
+is susceptible to an author's biases and mistakes,
+represents a substantial time investment,
+and therefore does not seem feasible to create enough labeled data to train a supervised model.
+
+As \citeauthor*{log_summary} point out themselves,
+even system experts might not even be aware of all aspects of a diverse software system,
+as large-scale services are usually developed and operated by hundreds of \ac{it} professionals.
+In this case, developers or operators analyzing the log
+cannot have complete knowledge of all components and underlying contexts~\parencite[1]{log_summary}.
+
+Additionally, 20 log-entries is a relatively short sequence,
+as large-scale distributed systems can generate over 500 thousand~\parencites[126]{hdfs_dataset}[125]{logpai_logparser_benchmarks}
+or even 120 million~\parencites[1250]{cloud_diag} log-entries per hour.
+As logs can get quite long, even only considering short periods of time which may be relevant to a failure
+(a few seconds of system runtime may already equate to hundreds or
+thousands of log-entries according to the above figures),
+we believe it to be necessary to evaluate summarization models on longer sequences of log-entries.
+
+Hence we propose novel summarization tasks on log-data,
+which can be applied to new datasets using mostly automatic means.
+For constructing reference summaries, we combine only log-entries corresponding to certain log events.
+We have two methods for selecting relevant log events, which necessitate different assumptions from each log dataset.
+We define them as two separate summarization tasks:
+\begin{description}
+\item[common log events] all events that are common between multiple occurrences of the same failure are selected for constructing the summary
+\item[non-normal log events] all events that do not occur during normal execution are selected for constructing the summary
+\end{description}
+Generally speaking, both approaches to constructing reference summaries require a larger collection of logs and
+cannot be applied to individual, unrelated log-entries.
+
+We first detail how we apply log parsing in the context of these tasks,
+then describe each summarization task in greater detail.
+
+\paragraph{Log parsing at component-level}
+
+Our approaches are based in large parts on the existing concept of log parsing,
+abstracting log messages into events,
+as it allows for comparing logs regardless of different
+time-stamps, threads, parameters and other variable parts of log-entries.
+
+However, as opposed to applying log parsing globally, if log-entries originate from different components of a system,
+we choose to parse them separately:
+Even if two components produce the same log message, these will be handled as two different log events.\\
+We believe this to be beneficial for the following two reasons:
+\begin{enumerate}
+\item Different components in a system represent different points of origin for a log-entry;
+      A monitoring system running out of memory is usually more severe than a sensor driver doing the same.
+      Preserving this information by handling entries from different components distinctly seems appropriate.
+\item If two system components produce the same message, it may be by coincidence;
+      Components performing different tasks in a system may produce similar messages,
+      but it seems unlikely that these represent the same underlying event or system-state.
+      For instance, the trivial message \verb+Successfully completed operation+ has a different meaning for a database component compared to a component parsing user data.
+      Therefore in the majority of cases, similar messages from different components will represent
+      distinct events and should be treated as such.
+\end{enumerate}
+The component representing the origin of a log-entry is often explicitly mentioned in logs,
+so handling each component separately comes at no additional cost for us;
+Nevertheless, in a setting where linking log-entries to their components is impracticable
+or our argumentation does not hold (e.g. components do not perform distinct tasks),
+parsing could also be applied globally without major loss of applicability.
+
+\subsection{Summarization based on \emph{common log events}}\label{subsec:common_log_events_summarization}
+
+This summarization task is based on the following prerequisite:
+\emph{Logs corresponding to a failure are grouped by the underlying root cause.}\\
+Each failure will have an underlying root cause that can be identified by system experts.
+When comparing logs from different logs of the same root cause,
+there will be parts of overlapping information.
+Using parsers such as \emph{Drain}~\parencite{drain}, events represented by entries in logs can be determined.
+This enables us to find the log events that are common between all logs with the same root cause (\emph{common log events}).
+As these events are present every time the failure happens,
+we expect a high correlation factor between the occurrence of the failure and the common log events.
+
+We hypothesize that the log-entries corresponding to these common log events are of high importance
+and describe the underlying error events and root causes.
+It follows that every summary of the logs contained in such a group of the same underlying root cause
+should contain at least parts of the information from the common log events.
+
+In summary, we propose the following process for collecting reference summaries from logs using \emph{common log events}:\\
+Log-entries from multiple logs with the same root cause are categorized into log events using a log parser.
+Then log events that are common to all logs are computed as the largest intersection between the sets of events from each log.
+After applying an optional preprocessing step, the log-entries of each log represent the documents to summarize,
+while the log-entries whose log events correspond to the set of common events represent the reference summaries.
+
+Given the log,
+the task is to produce a summary that should closely match the sequence of log-entries
+corresponding to the set of log events similar logs have in common.
+An overview of the process of collecting documents and reference summaries from logs is shown in \autoref{fig:common_log_events_summarization_overview}.
+
+\begin{figure}[ph]
+\centering
+\resizebox{!}{.85\textheight}{
+\begin{tikzpicture}[systemdiagram]
+\node[data,multiple] (logs) {logs with same root cause};
+
+\node[process] (parsing) [below = 1 of logs] {log parsing / log abstraction};
+\node[data,multiple] (struclogs) [below = 1 of parsing] {structured logs with entries linked to their corresponding events};
+\node[data,multiple] (events) [right = 4 of struclogs] {log events for each log};
+
+\node[process] (intersection) [below = 1 of events] {compute intersection};
+\node[data] (commevents) [below = 1 of intersection] {common log events};
+
+\node[process] (select) [below = 1 of commevents] {select only\\ entries linked to common events};
+\node[data,multiple] (commentries) [below = 1 of select] {log-entries\\ corresponding to common log events};
+
+\node[process] (preprocessref) [below = 1 of commentries] {optional textual preprocessing};
+\node[data,multiple] (references) [below = 1 of preprocessref] {reference summaries};
+
+\node[process] (preprocessdoc) at (struclogs|-preprocessref) {optional textual preprocessing};
+\node[data,multiple] (documents) [below = 1 of preprocessdoc] {documents to summarize};
+
+\draw[flow] (logs) -- (parsing);
+\draw[flow] (parsing) -- (struclogs);
+\draw[flow] (parsing) -| (events);
+%\draw[relation] (struclogs) -- (events);
+\draw[flow] (events) -- (intersection);
+\draw[flow] (intersection) -- (commevents);
+\draw[flow] (commevents) -- (select);
+\draw[flow] (struclogs) |- (select);
+\draw[flow] (select) -- (commentries);
+\draw[flow] (commentries) -- (preprocessref);
+\draw[flow] (preprocessref) -- (references);
+\draw[flow] (struclogs) -- (preprocessdoc);
+\draw[flow] (preprocessdoc) -- (documents);
+\end{tikzpicture}
+}
+\caption[Overview of the process of gathering documents and reference summaries for the summarization task based on \emph{common log events}.]{
+Overview of the process of gathering documents and reference summaries for the summarization task based on \emph{common log events}.
+Data in the above image is marked in a light blue color, while processes are colored slightly orange.\\
+A log parser is used to identify events corresponding to each log-entry,
+which can then be used to collect all events that occur in every log file (\emph{common log events}).
+As a basis for reference summaries we then use the entries corresponding to these events,
+while all entries form the basis for documents to summarize.}
+\label{fig:common_log_events_summarization_overview}
+\end{figure}
+
+\subsection{Summarization based on \emph{non-normal log events}}\label{subsec:non_normal_log_events_summarization}
+
+This summarization task is based on the following prerequisite:
+\emph{Logs are categorized into whether any failure occurred (abnormal) or not (normal execution).
+Both categories of logs cover roughly the same usage scenario and granularity.}\\
+This categorization may be easier to conduct, as no knowledge about underlying root causes or
+a preceding in-depth \ac{rca} is needed.
+Given a suitable monitoring system, this categorization could even happen automatically.
+Furthermore, by manually triggering failures, a large collection of logs adhering to the above criteria could be constructed.
+
+Again, log parsing is employed to determine events represented by log-entries.
+This time, it identifies all log events that can occur during normal execution
+and distinguishes them from any log events that do not (\emph{non-normal log events}).
+
+We suspect that the most impactful information is contained in log-entries
+whose corresponding events do not occur during normal operation
+and that those log-entries are symptomatic of the failure.
+As we assume all other log-entries to be of lesser importance,
+normal and abnormal logs must roughly cover the same application flow;
+Otherwise, this approach will not work well.
+
+For example, if the normal logs only contain communication with an API,
+but the abnormal logs record some sensor data,
+all log-entries observing sensor data will (wrongly) be assumed to be important.\\
+Conversely, if the normal logs contain events more events than necessary,
+also encompassing events unrelated to the abnormal logs, the results can be just as poor.
+For instance, it is abnormal for a system with no network interfaces to attempt to create a connection to an external service,
+while it may be entirely normal for any other system to do so.
+If the category of normal logs contains log instances from both systems,
+attempted abnormal network connections may (wrongly) be interpreted as irrelevant.
+
+Following our assumption, we determine that every summary of an abnormal log
+should contain at least parts of the information from log events that do not occur during normal operation.
+No summaries are generated for the logs without failures (normal logs).
+
+In summary, we propose the following process for collecting reference summaries from abnormal logs using \emph{non-normal log events}:\\
+Log-entries from multiple logs are categorized into log events using a log parser.
+Then log events occurring during normal operation are computed as the union between the sets of events from each normal log.
+After applying an optional preprocessing step, the log-entries of each abnormal log represent the documents to summarize,
+while the abnormal log-entries whose log events do not correspond to the set of normal events represent the reference summaries.
+
+Given an abnormal log,
+the task is to produce a summary that should closely match the sequence of log-entries
+corresponding to the set of these log events which are unique to abnormal logs.
+An overview of the process of collecting documents and reference summaries from logs is shown in \autoref{fig:non_normal_log_events_summarization_overview}.
+
+\begin{figure}[ph]
+\centering
+\resizebox{\textwidth}{!}{
+\begin{tikzpicture}[systemdiagram]
+\node[data,multiple] (abnormallogs) {logs depicting failures (abnormal)};
+
+\node[process] (abnormalparsing) [below = 1 of abnormallogs] {log parsing / log abstraction};
+\node[data,multiple] (abnormalstruclogs) [below = 1 of abnormalparsing] {structured logs with entries linked to their corresponding events};
+\node[data,multiple,opacity=0.7,dashed] (abnormaleventlogs) [left = 1.5 of abnormalstruclogs] {log events for each abnormal log};
+
+\node[data,multiple] (normallogs) [right = 4 of abnormallogs] {logs depicting regular execution (normal)};
+
+\node[process] (normalparsing) [below = 1 of normallogs] {log parsing / log abstraction};
+\node[data,multiple] (normaleventlogs) [below = 1 of normalparsing] {log events for each normal log};
+\node[data,multiple,opacity=0.7,dashed] (normalstruclogs) [right = 1.5 of normaleventlogs] {structured logs with entries linked to their corresponding events};
+
+\node[process] (union) [below = 1 of normaleventlogs] {compute union};
+\node[data] (normalevents) [below = 1 of union] {normal log events};
+
+\node[process] (select) [below = 1 of normalevents] {select any\\ entry \textbf{not} linked to a normal event};
+\node[data,multiple] (nonnormentries) [below = 1 of select] {log-entries\\ corresponding to non-normal log events};
+
+\node[process] (preprocessref) [below = 1 of nonnormentries] {optional textual preprocessing};
+\node[data,multiple] (references) [below = 1 of preprocessref] {reference summaries};
+
+\node[process] (preprocessdoc) at (abnormalstruclogs|-preprocessref) {optional textual preprocessing};
+\node[data,multiple] (documents) [below = 1 of preprocessdoc] {documents to summarize};
+
+\draw[flow] (abnormallogs) -- (abnormalparsing);
+\draw[flow] (abnormalparsing) -- (abnormalstruclogs);
+\draw[flow,dashed] (abnormalparsing) -| (abnormaleventlogs);
+\draw[flow] (normallogs) -- (normalparsing);
+\draw[flow] (normalparsing) -- (normaleventlogs);
+\draw[flow,dashed] (normalparsing) -| (normalstruclogs);
+\draw[flow] (normaleventlogs) -- (union);
+\draw[flow] (union) -- (normalevents);
+\draw[flow] (normalevents) -- (select);
+\draw[flow] (abnormalstruclogs) |- (select);
+\draw[flow] (select) -- (nonnormentries);
+\draw[flow] (nonnormentries) -- (preprocessref);
+\draw[flow] (preprocessref) -- (references);
+\draw[flow] (abnormalstruclogs) -- (preprocessdoc);
+\draw[flow] (preprocessdoc) -- (documents);
+\end{tikzpicture}
+}
+\caption[Overview of the process of gathering documents and reference summaries for the summarization task based on \emph{non-normal log events}.]{
+Overview of the process of gathering documents and reference summaries for the summarization task based on \emph{non-normal log events}.
+Data in the above image is marked in a light blue color, while processes are colored slightly orange.\\
+The process of log parsing is used on both categories of logs,
+but only the events belonging to normal logs and the entries of the abnormal logs are of greater interest.
+Now we can identify which events can occur during normal operation of the system and
+collect all log-entries that \emph{do not} correspond to normally occurring events as the basis of our reference summaries.}
+\label{fig:non_normal_log_events_summarization_overview}
+\end{figure}
+
+\section{Summarization Models}\label{sec:summary_models}
+
+Recently, substantial advances have been made towards automated abstractive summarization
+by employing \ac{seq2seq} transformer models.
+Among the most performant ones are BART~\parencite{bart} and PEGASUS~\parencite{pegasus},
+both using architectures analogous to the architecture described in \parencite{transformer}.
+
+As these models show good performance while maintaining a (relative speaking) straightforward model architecture,
+we chose these models as a baseline for our experiments.
+A short overview of the two models, their methodology, and their differences follows:
+
+\paragraph{BART}
+
+Performing well in multiple \ac{nlp} tasks, not only summarization, BART is an \enquote{allrounder}.
+It performs as well as specialized models in discriminative tasks and language understanding,
+comparatively well in dialogue generation, question answering and translation,
+and excels at summarization, outperforming previous models such as BERTSum~\parencite[7876-7877]{bart}.
+
+BART has been pre-trained in the same environment as the RoBERTa-model,
+using text corpora from the domains of news articles, webpages, wiki articles.~\parencite[3]{roberta}.
+
+\citeauthor*{bart} consider and evaluate different approaches to what they call
+\emph{document corruption} for pre-training their BART-model. %~\parencite[7872-7873]{bart}.
+After an empirical study they decide on two corruption methods
+used in the pre-training objective of the final model: %~\parencite[7875-7876]{bart}:
+\begin{displaycquote}[7873]{bart}
+\begin{description}
+\item[Text Infilling] A number of text spans are sampled,
+      with span lengths drawn from a Poisson distribution (\(\lambda = 3\)).
+      Each span is replaced with a \emph{single} \verb+[MASK]+ token.
+      0-length spans correspond to the insertion of \verb+[MASK]+ tokens.
+      \textelp{}
+\item[Sentence Permutation] A document is divided into sentences based on full stops,
+      and these sentences are shuffled in a random order.
+\end{description}
+\end{displaycquote}
+
+Therefore BART's pre-training objective can be understood as a self-supervised learning task.
+The model is trained to predict which (possibly empty) text sequences are missing in a text
+where a mask-token has been inserted.
+
+\paragraph{PEGASUS}
+
+On the other hand, PEGASUS is a model specifically designed with
+abstractive summarization in mind.
+The final model outperforms all previous state-of-the-art models
+(including BART) on nearly all observed datasets~\parencite[11328-11329,11334]{pegasus}.
+In surveys where human judges were asked to assess the quality of summaries on a numeric rating scale,
+the authors found their PEGASUS-models generate summaries that are at least
+as good as (human-written) references in the XSum and
+CNN/DailyMail datasets~\parencite[11335]{pegasus}.
+
+\citeauthor*{pegasus} introduce a new pre-training objective tailored
+to the summarization task which they call \emph{gap sentences generation}:
+\begin{displaycquote}[11328]{pegasus}
+In PEGASUS, important sentences are removed/masked from an input document
+and are generated \textelp{} from the remaining sentences,
+similar to an extractive summary.
+\end{displaycquote}
+It should be noted that contrary to BART, PEGASUS only generates the masked sentences,
+not the full reconstructed inputs~\parencite[11331]{pegasus}.
+
+Similar to BART, the pre-training objective used for PEGASUS is a self-supervised learning task.
+The model is trained to predict which sentences are missing in a text
+where a mask-token has been inserted instead.
+Furthermore, PEGASUS was also pre-trained in the domain of news articles and webpages, %~\parencite[11332]{pegasus},
+although the exact datasets used vary from those used with BART.
+
+The difference lies with the selection of text sequences to be masked:\\
+Different methods for selecting the sentences (random \(n\), first \(n\), \ldots{})
+to mask have been evaluated empirically. %~\parencite[11330,11332-11333]{pegasus}.
+For the final pre-trained models, sentences are ranked by importance by
+calculating \acs*{rouge}-1 \(F_1\)-scores between the selected sentence and the rest of the document,
+and a share of the top-ranked sentences are masked for pre-training.~\parencite[11330,11333]{pegasus}.
+
+\subsection{Extractive and Abstractive Summarization}
+
+Although we propose using models that would be considered \emph{abstractive} summarization models,
+the summarization tasks we described in the previous section lead to
+reference-summaries which strongly encourage an \emph{extractive} approach to summarization~\parencite[541-542]{summarization_critical_evaluation}:
+\begin{description}
+\item[Extractive summarization] constructs summaries by combining fragments from the input-text.
+      Extractive models can be constructed as binary classifiers,
+      deciding whether to include a text fragment in the summary, or not.
+\item[Abstractive summarization] is able to understand and paraphrase the information contained in the input-text and hence produce summaries of different phrasing and wording.
+      \Acl{seq2seq} models are fit for this task,
+      as they are able to process any text input and produce arbitrary text output.
+\end{description}
+
+Abstractive models have the benefit of being able to produce summaries whose quality is not limited to that of the input text.
+\Acl{seq2seq} models can be trained to perform well on multiple tasks simultaneously,
+not just for summarization, making them more versatile.
+For instance, BART outperformed not only previous summarization models,
+but also scored comparable to specialized models in a varaity language understanding and generation tasks~\parencite[7876-7877]{bart}.
+
+Using pre-trained abstractive summarization models for our task is attractive
+since models like PEGASUS are already capable of producing outputs comparable in quality to summaries produced by humans for selected datasets.
+\citeauthor*{pegasus} conducted surveys where human judges were asked to assess the quality of summaries on a numeric rating scale
+and found their models generate summaries that are at least as good as references in the XSum and CNN/DailyMail datasets~\parencite[11335]{pegasus}.
+
+\section{Approach}\label{sec:approach}
+
+\acreset{nlp}
+
+Our goal is to fine-tune and evaluate a \ac{nlp} model that is able to summarize log-data.
+Assuming the trained model can understand log-data well enough,
+it may be able to generalize well to other tasks in the context of log analysis.
+For a model to be able to generalize to other such tasks,
+it needs to be able to produce arbitrary textual outputs.
+Therefore we primarily focus on abstractive \acl{seq2seq} models.
+
+To evaluate models in their capability to summarize logs,
+we introduced summarization tasks on log-data in \autoref{sec:summarization_tasks},
+which we now implement with a concrete architecture:
+\begin{enumerate}
+\item We use the log parser Drain~\parencite{drain} as made publicly available%
+      \footnote{The repository is available at: \url{https://github.com/IBM/Drain3}}
+      by IBM.
+      Drain was previously found to be one of the state-of-the-art log parsers,
+      both in terms of accuracy and efficiency~\parencite[125-128]{logpai_logparser_benchmarks}.
+      It preprocesses log-entries using few (usually one or two) manually constructed
+      regular expressions and then uses a parsing tree to group log-entries on the fly (\emph{online parsing})~\parencite{drain}.
+
+      IBM's version represents an updated and more feature-rich,
+      robust adaptation of the original implementation, which in turn was provided by the LogPAI-team%
+      \footnote{Located inside LogPAI's repository: \url{https://github.com/logpai/logparser/tree/e8d96cd4de1121c5d2b517982c6028cd06e643f1/logparser/Drain}}
+      in the context of their evaluation and benchmarks of log parsers~\parencites{logpai_logparser_evaluation}{logpai_logparser_benchmarks}.
+      We personally contributed to IBM's implementation by providing it with a way to extract
+      parameters from log messages more accurately by leveraging already specified regular expressions.
+
+      Using Drain, we determine the log events contained in the logs of our datasets.
+      During log parsing, we consider the log messages of different system components separately:\\
+      Even if two components produce the same log message, these will be handled as two different log events.
+\item We apply one of our two summarization tasks:
+      \begin{description}[nosep]
+      \item[summarization based on \emph{common log events}]
+            We compute the log events that are present in all logs with the same root cause,
+            select log-entries corresponding to these events and use them as a basis for reference summaries.
+      \item[summarization based on \emph{non-normal log events}]
+            We compute the log events that are not present in any log during normal operation of a system (no failures),
+            select log-entries corresponding to these events and use them as a basis for reference summaries.
+      \end{description}
+\item We focus only on the log message contained in each log-entry and apply a preprocessing step laid out in \autoref{subsec:preprocessing}.
+      This preprocessing is applied to both log messages we use as input for our models and to log messages forming reference summaries.
+\item We split input documents and reference summaries into multiple parts,
+      respecting the input size limitations of our models.
+      As explained in \autoref{subsec:input_size_limitations},
+      we can do this without truncating whole documents or providing mismatched summaries.
+\item We evaluate different summarization models on the new summarization tasks.
+\end{enumerate}
+For better comparison with existing previous work,
+we also evaluate using the openly available manual summaries
+written by \citeauthor*{log_summary}~\parencite{log_summary} in addition to our own tasks.
+
+The next subsections first provide details on the models we use
+and the insights we aim to gain through experiments,
+then explain how we preprocess log messages and split documents into multiple parts.
+
+\subsection{Training and Evaluation of \ac*{nlp} models}\label{subsec:approach_models}
+
+As \ac{nlp} models pre-trained on large text corpora have shown to build a baseline for language understanding of the English language~\parencites[7876-7878]{bart}[4175-4176]{bert},
+we choose to employ \acl{seq2seq} models pre-trained on \ac{nlp} tasks.
+With English being known as a \enquote{lingua franca} of programming,
+the predominant language used in the log-data we study,
+we exclusively focus on models trained on English corpora.
+
+For their good performance in other summarization domains and production-ready,
+open-access availability in the context of HuggingFace's \emph{Transformers}-library~\parencite{huggingface_transformers},
+we choose BART~\parencite{bart} and PEGASUS~\parencite{pegasus} as bases for our models.\\
+It should be noted that HuggingFace's implementations of models may vary from their original implementations.
+In our case, the differences do not lie with
+any implementation details described in the original papers.%
+\footnote{For PEGASUS, differences are documented in the following GitHub-issue:
+\accessurl{https://github.com/huggingface/transformers/issues/6844}{22.03.2022}}
+
+Because of the limited availability of reference summaries for the log summarization task,
+and to quantify the effect of pre-training and supervision regarding log-data,
+we evaluate models with differing levels of training on log-data:
+\begin{description}[parsep=0pt]
+\item[\acf{zsl}]
+      The models are directly evaluated on the summarization task without further fine-tuning.
+\item[\acf{fsl}]
+      The models are fine-tuned on the summarization task and then evaluated.
+\item[\acf{prezsl}]
+      The models are pre-trained in a self-supervised manner on the log-data
+      and then evaluated on the summarization task without further fine-tuning.
+\item[\acf{prefsl}]
+      The models pre-trained on the log-data are further fine-tuned on the supervised summarization task and then evaluated.
+\end{description}
+The distinction between \emph{pre-training} and \emph{fine-tuning} is one of convention,
+as both refer to training processes, however fine-tuning is tailored to a specific dataset or task.
+% \footnote{See \accessurl{https://stackoverflow.com/a/68483041}{28.03.2022}}
+Given that we apply both pre-training and fine-tuning on the same kind of log-data,
+we feel the need to define how this terminology is used in the context of this work:
+\begin{description}[nosep]
+\item[Pre-training] refers to a training process,
+      where the model inspects a given text in a self-supervised manner,
+      learning to fill in information intentionally left out from it.
+\item[Fine-tuning] on the other hand refers to a supervised training process,
+      where the model is given a document as input and evaluated using a target text.
+      In our case we refer to fine-tuning exclusively in the context of summarization,
+      where the model is given a document to summarize and is evaluated using a reference summary.
+\end{description}
+
+Exactly which models we train and at which levels of supervision is laid out in the two next segments.
+
+\subsubsection{Evaluation of fine-tuned summarization models from other domains for log summarization}\label{subsubsec:approch_experiment_1}
+
+We first intend to determine how similar the task of log summarization is compared to summarization in previously researched domains,
+respectively, if models can transfer their knowledge on summarization from other domains to log summarization.
+To this end, we examine the models laid out in \autoref{tab:finetuned_models_overview}
+that have already been fine-tuned on different summarization datasets,
+and evaluate them in a \acl{zsl} and \acl{fsl} setting.
+To better understand whether previous fine-tuning has any positive effects,
+we also need to consider how models not previously fine-tuned perform on our tasks.
+This is why we evaluate the large versions of the pre-trained baselines
+\bart{-Large} (\modellink{facebook/bart-large}) and \pegasus{-Large} (\modellink{google/pegasus-large}) in addition to the models laid out in \autoref{tab:finetuned_models_overview}.
+
+If summarization on other domains is similar to log summarization,
+this would be beneficial to \ac{nlp} models requiring large amounts of supervised training.
+One could train a model on an actively researched domain with higher availability of large summarization datasets
+and avoid overfitting models on the few existing log summaries.\\
+Previous research has found that both model-architectures greatly benefit from learning even with few examples~\parencite[5642-5643]{summary_models_comparison},
+we expect the model's performance to improve considerably after further fine-tuning.
+
+XSum~\parencite{xsum} and CNN/DailyMail~\parencite{cnn_dailymail}
+are popular examples of news datasets.
+These also represent the only datasets BART models were originally trained on for summarization.
+In general, XSum's summaries are shorter and more abstractive than CNN/DailyMail's,
+meaning they often include text sequences not present in the document to be summarized.
+
+On the other hand, AESLC represents summarization of business emails,
+with summaries generated from subject lines.
+Here both documents and summaries are significantly shorter~\parencite[447]{aeslc}.
+
+Finally, BigPatent is a dataset containing summaries of U.S. patent documents;
+summaries are more abstractive and often include recurring segments~\parencite[2204-2205]{bigpatent}.
+
+A simple comparison between these conventional summarization datasets
+and the log summarization datasets used by us is shown in
+\autoref{tab:other_domains_vs_log_datasets} on \autopageref{tab:other_domains_vs_log_datasets}.
+
+\begin{table}[htb]
+\centering
+\footnotesize
+\begin{threeparttable}
+\begin{tabular}{l@{\qquad\qquad}l@{\qquad}c}
+\toprule
+\textbf{identifier}
+&\textbf{HuggingFace's model}
+&\textbf{model described in}\\
+\midrule
+\bart{-XSum}                 &\modellink{facebook/bart-large-xsum}         &\parencite[7876-7877]{bart}\\
+\bart{-CNN}                  &\modellink{facebook/bart-large-cnn}          &\parencite[7876-7877]{bart}\\
+\pegasus{-XSum}              &\modellink{google/pegasus-xsum}              &\parencite[11336]{pegasus}\tnote{*}\\
+\pegasus{-CNN}               &\modellink{google/pegasus-cnn\_dailymail}    &\parencite[11336]{pegasus}\tnote{*}\\
+\pegasus{-AESLC}             &\modellink{google/pegasus-aeslc}             &\parencite[11336]{pegasus}\tnote{*}\\
+\pegasus{-BigPatent}         &\modellink{google/pegasus-big\_patent}       &\parencite[11336]{pegasus}\tnote{*}\\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\item[*] Models are based on the improved Mixed \& Stochastic approach,
+         described in the original paper as PEGASUS\textsubscript{LARGE}-(mixed,stochastic),
+         as stated here:
+         \accessurl{https://github.com/huggingface/transformers/issues/4918\#issuecomment-673572058}{14.03.2022}
+\end{tablenotes}
+\caption{Overview of models already fine-tuned for summarization we experiment with.}
+\label{tab:finetuned_models_overview}
+\end{threeparttable}
+\end{table}
+
+\subsubsection{Effects of further pre-training on log-data}\label{subsubsec:approch_experiment_2}
+
+During pre-training, models are expected to predict text segments in the input data,
+which have been replaced (\enquote{masked}) by a mask-token.
+The most basic form of this task where a single token is missing is known as \ac{mlm}
+and was introduced for pre-training \ac{nlp} models by \citeauthor*{bert}~\parencite{bert}.
+Since then, many alternative pre-training objectives have been proposed, building on this idea.
+Both models we use have been pre-trained using this basic idea,
+but in contrast to \ac{mlm}, longer sequences of text can be missing;
+the exact method by which the masked text segments are chosen differ between BART and PEGASUS.
+
+In the context of their empirical study \citeauthor*{pretraining_study} note that further pre-training is not always
+constructive towards improving a model's performance when fine-tuning for a specific task and domain later on.
+However, they do observe that further pre-training a model is especially effective
+when data used for fine-tuning is not available in large quantities~\parencite[56-57]{pretraining_study}.\\
+Furthermore, \citeauthor*{dont_stop_pretraining} find that further pre-training significantly improves performance
+when the domain a model was trained on differs from the domain a model is used in~\parencite[8345]{dont_stop_pretraining}.
+
+Given the difference between the model's training data (mostly web pages and news articles) and log-data,
+we see great importance in further pre-training the models and follow the self-supervised approaches
+chosen by the respective model.
+
+As HuggingFace's \emph{Transformers}-library~\parencite{huggingface_transformers}
+does not provide implementations for neither model's pre-training objectives,
+they have been implemented manually by us following the ideas laid out in the model's respective article
+and studying the code provided in the original projects.%
+\footnote{See
+\url{https://github.com/pytorch/fairseq/blob/fcca32258c8e8bcc9f9890bf4714fa2f96b6b3e1/fairseq/data/denoising_dataset.py}
+for BART's implementation}% and
+% \url{https://github.com/google-research/pegasus/blob/29fe4b974676fdd790069923b4e38f9aec01ff08/pegasus/ops/sentence_selection.cc}
+% for PEGASUS'.}
+
+We follow BART's approach to pre-training using the \emph{Text Infilling} method:
+Possibly empty token sequences with lengths drawn from a
+Poisson distribution (\(\lambda = 3\)) are removed and
+masked by inserting a mask-token~\parencite[7873]{bart}.
+Masked sequences can start at sub-tokens of words%
+\footnote{The original paper does not mention whether word-boundaries are respected and the original implementation supports both variants.
+See also: \url{https://github.com/pytorch/fairseq/blob/fcca32258c8e8bcc9f9890bf4714fa2f96b6b3e1/fairseq/data/denoising_dataset.py\#L104-L106}}
+and can span over multiple messages.
+The starting positions of the masked sequences are uniformly chosen.
+
+Contrary to the original implementation,
+it is made sure that already inserted mask-tokens are not deleted when masked sequences overlap.%
+\footnote{The original implementation may override existing masks as noted here \accessurl{https://github.com/pytorch/fairseq/issues/3486\#issuecomment-901689083}{30.03.2022}}
+During pre-training model is then required to predict which (possibly empty)
+token sequences are missing in a text where a mask-token is present.
+
+% \begin{description}
+% \item[BART-style]
+% \item[PEGASUS-style] We apply the \acf{gsg} pre-training
+%       objective tailored to summarization as introduced by PEGASUS:
+%       Whole sentences are replaced/masked by a mask-token.~\parencite[11330]{pegasus}
+%       As whole sentences are rare in log-data,
+%       instead we apply this approach by masking whole log messages.
+%       Following \citeauthor*{pegasus},
+%       we rank messages by \enquote{importance} and select a share of the top-ranked sequences for masking,
+%       which the model will then need to fill in during pre-training.
+%       The importance-scores are calculated as \acs*{rouge}-1 \(F_1\)-scores between the selected message and the rest of the document~\parencite[11330,11332]{pegasus}.
+%
+%       Contrary to the original implementation, we use a simpler implementation of \acs*{rouge}
+%       that does not implement word stemming and uses the model's tokenizer directly for tokenization.
+%       While this means our implementation may select important sentences differently,
+%       we believe differences on log-data will be negligible.
+%       In our case these simplifications are important to speed up the processing needed for preparing the pre-training objective.
+%
+%       We use the model \pegasus{-Large} (\modellink{google/pegasus-large}) for this style of pre-training,
+%       which is corresponds to the improved approach described as
+%       PEGASUS\textsubscript{LARGE}-(mixed,stochastic) in the original paper.
+% \end{description}
+To quantify the performance boost to be gained from pre-training alone,
+we first evaluate the model in a \ac{zsl} setting with no further training and
+compare their performance after pre-training in a \ac{prezsl} setting.
+Finally, we additionally fine-tune the pre-trained models on the actual summarization tasks (\acs{prefsl})
+in order to investigate whether further pre-training is useful in the domain of log-data as compared to just fine-tuning the models.
+
+After fine-tuning, at least BART models for summarization are not able to fill in masks anymore%
+\footnote{As noted here \accessurl{https://huggingface.co/docs/transformers/v4.17.0/en/model_doc/bart\#implementation-notes}{28.03.2022}
+and as can be verified by attempting to do so manually.}
+% PEGASUS models are capable of working with their mask-tokens, but do not produce sensible predictions either.}
+and thus cannot directly achieve their pre-training objectives.
+We will not experiment with further pre-training models that are already fine-tuned for summarization.
+Since summarization models are not usually exposed to masks during fine-tuning,
+they are not encouraged to retain their ability to fill in masks;
+We would expect them to show worse pre-training performance than non fine-tuned models eitherway.
+
+Thus, we cannot compare different variants of the same model,
+and decide to use the model \bart{-Base} (\modellink{facebook/bart-base}) for this style of pre-training.
+Due to its smaller size, the training and evaluation are considerably faster.
+
+% NOTE: Unused feature, as it did not greatly effect pre-training perplexity and is thus not needed for BART.
+%
+% During pre-training we use a sliding window; log messages up to a certain amount are collected.
+% Then the log messages are fed into the model (respecting the maximum input length of 1024) until the window is exhaused;
+% the window is then advanced to its next position, skipping log messages equal to a given stride.
+% To illustrate:
+% {\scriptsize
+% \begin{lstlisting}[language=Python]
+% >>> x
+% [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+% >>> list(sliding_window(x, size=4, stride=2))
+% [(0, 1, 2, 3), (2, 3, 4, 5), (4, 5, 6, 7), (6, 7, 8, 9)]
+% \end{lstlisting}
+% }
+%
+% The idea is to allow the model to see the same log message with different contexts.
+% At the moment we used a stride that is so big,
+% that the idea of seeing different contexts does not really apply.
+%
+% Using a windowed input is essential in the case of the PEGASUS-style pre-training,
+% as calculating the importance between \emph{all} log messages of a log is slow.
+
+\subsection{Text Preprocessing}\label{subsec:preprocessing}
+
+In the context of news summarization \citeauthor*{summarization_critical_evaluation}
+previously found that datasets contained noisy reference summaries,
+such as passages unrelated to the actual article, markup characters, or placeholders.
+Using simple regular expressions, they removed such noise from reference summaries~\parencite[544-545]{summarization_critical_evaluation}.
+
+Inspired by this, we also intend to simplify the text contained in log messages,
+in order to make the message more readable and more similar to actual text.
+
+\newcommand{\identifier}[1]{\textcolor{orange!50!black}{\textit{#1}}}
+\newcommand{\classname}[1]{\textcolor{green!50!black}{\textbf{#1}}}
+\newcommand{\pathuri}[1]{\textcolor{blue!50!black}{\underline{#1}}}
+\newcommand{\address}[1]{\textcolor{cyan!50!black}{#1}}
+\newcommand{\fallback}[1]{\textcolor{purple!75!black}{\textbf{#1}}}
+
+Logs often contain long \identifier{identifiers}, \address{addresses of remote systems}, \classname{class names}, \pathuri{paths} and other \pathuri{URIs},
+that may be problematic to tokenize in order to use them as inputs for \acl{seq2seq} models.
+Critically, relative to their length, these sequences contain little information that \ac{nlp} models can actually use.
+Additionally, log-entries originate from different components,
+making the formatting of log messages quite inconsistent when compared to regular text;
+Ranging from well-constructed sentences, to fragments with inconsistent use of lower- and uppercase, punctuation, and special characters.
+This is exemplified for the \hadoop{} log dataset in \autoref{tab:hadoop_noise_example},
+which is later introduced in \autoref{sec:datasets}.
+
+\begin{table}[htbp]
+\begin{tabularx}{\columnwidth}{>{\scriptsize\ttfamily\hbadness=10000}X}
+\toprule
+We launched 1 speculations. Sleeping 15000 milliseconds.\\
+\midrule
+Processing the event EventType: CONTAINER\_REMOTE\_CLEANUP for container
+\identifier{container\_1445062781478\_0011\_01\_000002}
+taskAttempt \identifier{attempt\_1445062781478\_0011\_m\_000000\_0}\\
+\midrule
+Before Scheduling: PendingReds:0 ScheduledMaps:0 ScheduledReds:0
+AssignedMaps:9 AssignedReds:1 CompletedMaps:4 CompletedReds:0 ContAlloc:13 ContRel:0
+HostLocal:12 RackLocal:0\\
+\midrule
+Process Thread Dump: Communication exception\newline
+12 active threads\newline
+Thread 21 (SpillThread):\newline
+  State: WAITING\newline
+  Blocked count: 0\newline
+  Waited count: 6\newline
+  Waiting on \classname{java.util.concurrent.locks.AbstractQueuedSynchronizer\$ConditionObject}@2e498b1\newline
+  Stack:\newline
+    \classname{sun.misc.Unsafe.park}(Native Method)\newline
+    \classname{java.util.concurrent.locks.LockSupport.park}(LockSupport.java:186)\newline
+    \textelp{}\newline
+Thread 20 (\classname{org.apache.hadoop.hdfs.PeerCache}@60ec1f20):\newline
+  \textelp{}\\
+\midrule
+Error Recovery for block \identifier{BP-1347369012-10.190.173.170-1444972147527:blk\_1073742514\_1708}
+in pipeline \address{10.190.173.170:50010}, \address{10.86.164.9:50010}:
+bad datanode \address{10.86.164.9:50010}\\
+\midrule
+Releasing unassigned and invalid container Container:
+[ContainerId: \identifier{container\_1445062781478\_0012\_01\_000012}, NodeId: MININT-75DGDAM1.fareast.corp.microsoft.com:51951,
+NodeHttpAddress: MININT-75DGDAM1.fareast.corp.microsoft.com:8042, Resource: <memory:1024, vCores:1>,
+Priority: 20, Token: Token \{ kind: ContainerToken, service: \address{10.86.165.66:51951} \}, ]. RM may have assignment issues\\
+\midrule
+Processing split: \pathuri{hdfs://msra-sa-41:9000/pageinput2.txt}:0+134217728\\
+\midrule
+Registering class
+\classname{org.apache.hadoop.mapreduce.v2.app.job.event.JobFinishEvent\$Type}
+for class
+\classname{org.apache.hadoop.mapreduce.v2.app.MRAppMaster\$JobFinishEventHandler}\\
+\midrule
+Extract \pathuri{jar:file:/D:/hadoop-2.6.0-localbox/share/hadoop/yarn/hadoop-yarn-common-2.6.0-SNAPSHOT.jar!/}\newline{}\pathuri{webapps/mapreduce}
+to
+\pathuri{C:\textbackslash{}Users\textbackslash{}msrabi\textbackslash{}AppData\textbackslash{}Local\textbackslash{}Temp\textbackslash{}2\textbackslash{}Jetty\_0\_0\_0\_0\_47462\_mapreduce\_\_\_\_j3iclo\textbackslash{}webapp}\\
+\bottomrule
+\end{tabularx}
+\caption[Examples of \enquote{noisy} log messages and inconsistent style across the \hadoop{}-dataset.]{
+Examples of \enquote{noisy} log messages and inconsistent style across the \hadoop{}-dataset.\\
+\identifier{Identifiers}, \address{addresses of remote systems}, \classname{class names}, \pathuri{paths} and other \pathuri{URIs} are highlighted in the above messages.}
+\label{tab:hadoop_noise_example}
+\end{table}
+
+Thus, we introduce a preprocessing/simplification step,
+so that models will not be expected to replicate many complex patterns present in log-data:
+
+To simplify messages, we use their corresponding log templates and parameters determined during log parsing,
+process these parameters, and insert them back into the template to reconstruct simplified messages.
+We use several regular expressions to improve the detection of parameters
+and categorize parameters according to these during preprocessing.
+
+Based on the idea of replacing long sequences that convey little useful information,
+we devise rules for different categories of parameters.
+If the parameter represents a(n)
+\begin{description}[nosep, itemsep=1ex, labelwidth=.25\textwidth, leftmargin=\labelwidth+\labelsep, align=parright]
+\item[filesystem path] we simplify it to the last word contained in the path,
+\item[URI] we simplify it to its URI-type, e.g. \verb+http-URL+ for a URI beginning with \verb+http://+,
+\item[Java object path] we simplify it to the first word contained in the last path elements (usually the entire class-name),
+\item[IP- or mad-address] we compute a corresponding short hash and replace it with a text like \verb+remote host #<hash>+,
+\item[known identifier] we use a hash again, but indicate the type of object referenced like \verb+<type>#<hash>+,
+\item[long list of numbers] we simplify it to the 3 numbers with highest occurrence,
+\item[hexadecimal number] we convert it into a decimal number,
+\item[long sequence of hex.~characters] we shorten it,
+\item[number] we leave it as is,
+\item[otherwise] we simplify it to the longest word contained in the parameter as a fallback.
+\end{description}
+
+In addition to the rule-based message simplification laid out above,
+we also remove some complex patterns \emph{before} log parsing:
+Patterns spanning multiple lines such as stack traces and information dumps represent information hard to parse and process.
+Some log messages contain additional information that may prefix any message,
+such as markers for debugging traces or additional meta-information such as timestamps.
+It is necessary to separate these from log messages before parsing them,
+at least with fixed-length templates such as those produced by Drain.
+The same log message will be assigned different events depending on whether additional information is present or not,
+inhibiting our summarization tasks from working as intended.
+
+The results of our efforts are exemplified in \autoref{tab:hadoop_simplified_example}.
+While our heuristical approach may destroy useful information in some cases
+and does not go as far enough to fix inconsistent styling in other cases,
+we believe our simplification strikes an acceptable balance and increases the readability overall.
+
+\begin{table}[htbp]
+\begin{tabularx}{\columnwidth}{>{\scriptsize\ttfamily\hbadness=10000}X}
+\toprule
+We launched 1 speculations. Sleeping 15000 milliseconds.\\
+\midrule
+Processing the event EventType: \fallback{CONTAINER} for container \identifier{container\#17058} taskAttempt \identifier{attempt\#64013}\\
+\midrule
+Before Scheduling: PendingReds:0 ScheduledMaps:0 ScheduledReds:0
+AssignedMaps:9 AssignedReds:1 CompletedMaps:4 CompletedReds:0 ContAlloc:13 ContRel:0
+HostLocal:12 RackLocal:0\\
+\midrule
+Process Thread Dump: Communication exception 12 active threads\\
+\midrule
+Error Recovery for block \identifier{block\#68462} in pipeline \address{remote host \#28779}, \address{remote host \#68312}: bad datanode \address{remote host \#68312}\\
+\midrule
+Releasing unassigned and invalid container Container:
+[ContainerId: \identifier{container\#5224}, NodeId: \fallback{microsoft.} NodeHttpAddress: \fallback{microsoft.} Resource: <memory:1024, vCores:1>, Priority: 20,
+Token: Token \{ kind: ContainerToken, service: \address{remote host \#80275} \}, ].
+RM may have assignment issues\\
+\midrule
+Processing split: \pathuri{hdfs-URL}:0+134217728\\
+\midrule
+Registering class \classname{JobFinishEvent} for class \classname{MRAppMaster}\\
+\midrule
+Extract jar:file:/\pathuri{jar-path}!\pathuri{mapreduce-path} to \pathuri{webapp-path}\\
+\bottomrule
+\end{tabularx}
+\caption[Simplified messages from the examples in \autoref{tab:hadoop_noise_example}.]{
+Simplified messages from the examples in \autoref{tab:hadoop_noise_example}.\\
+The replacements of parameters previously highlighted in the examples are highlighted again,
+but there are also a few \fallback{paramters simplified using our fallback-rule}.}
+\label{tab:hadoop_simplified_example}
+\end{table}
+
+It is important to stress that our \ac{nlp} models are only given the simplified messages as input.
+The reference summaries used in our summarization tasks are also composed of these simplified messages.
+Thus our approach does not evaluate how important the content of each log message itself is:
+For evaluation, it is not important which parts of the log message the model is expected to reproduce.\\
+Nevertheless, we suspect that making log messages more readable
+while containing enough context for a model to be able to identify important log messages
+is beneficial to the model's summarization abilities.
+
+As a final note, we believe that our preprocessing step could also be refined by making it mostly lossless
+to convert the simplified messages back to the original messages.
+For example, we could convert segments like \verb+remote host #<hash>+ back to IP-addresses using a unique mapping of the contained hash.
+While this could be beneficial to applications where the exact IP-address or identifiers are of high interest,
+we are not interested in preserving the exact messages as it is not essential to summarization,
+and will not further explore this idea going forward.
+
+\subsubsection{Feeding log messages to \ac{nlp} models}\label{subsubsec:model_input_challenges}
+
+\ac{nlp} models are typically designed to process texts that are made up of multiple sentences
+and may not be able to handle some specifics of log-data well.
+We have already discarded any meta-information contained in log-entries and focused only on the log messages,
+but some challenges still remain in processing these messages.
+
+Transformer-based \ac{nlp} models typically use a tokenizer to convert texts into a sequence of tokens.
+Each token is assigned to a distinct vector, a so called \emph{embedding}, that the model operates on.
+The first challenge comes with the tokenizer's ability to process previously unseen words,
+of which there may be many in log-data. For example, in the form of compound words.
+
+In our experiments, the tokenizers used by both PEGASUS and BART were able to handle longer compound words composed of multiple English words:
+Mixed case (\emph{camelCase} or \emph{CapitalCamelCase}) compounds will be split into multiple lexical units.
+As an example, PEGASUS' tokenizer will split \verb+NodeHttpAddress+ into the 3 tokens \verb+_Node+, \verb+Http+ and \verb+Address+,
+denoting that \verb+_Node+ starts a new word, while the other tokens do not and are part of the previous word.
+
+Therefore we decide against splitting such compounds manually in our preprocessing step.
+Compounds often refer to a singular entity or concept;
+splitting compounds into multiple lexical components will inevitably destroy this kind of information that may be useful for \ac{nlp} models.
+
+However, another problem is the one of separating multiple log messages syntactically in a model's input.
+In typical English texts, punctuation marks symbolize the semantic separation of text segments.
+These are absent in log-data; Here, linebreaks are usually used to separate log-entries
+and log messages may or may not make use of punctuation themselves.
+
+Usually encoder-decoder models include special tokens to symbolize \acp{bos} and \acp{eos}~\parencite[3]{seq2seq} or sometimes a special \ac{sep} token~\parencite[4174]{bert}.
+But neither BART nor PEGASUS has been trained to use multiple \ac{sep}, \ac{bos}- or \ac{eos}-tokens to separate sentences in inputs:
+The primary purpose of \ac{bos}-/\ac{eos}-tokens is to give a model's decoder
+an input when predicting the first token (\ac{bos}-token) and the last token (\ac{eos}-token)~\parencite[2-3]{seq2seq}.%
+\footnote{See also \accessurl{https://huggingface.co/blog/encoder-decoder\#background}{05.04.2022} for a more in-depth explanation.}
+
+\citeauthor*{bert} did leverage the idea of \ac{sep}-tokens to separate
+\emph{pairs} of sentences in the input for different kinds of tasks,
+where a model would need to consider two different text sequences (e.g. question answering or sentence entailment)~\parencite[4174]{bert}.
+BART later used their \ac{bos}-/\ac{eos}-tokens for the purpose of separation for these kinds of tasks~\parencite[7874]{bart}.
+
+So while the use of \ac{bos}-/\ac{eos}-tokens for separation of different text segments is not unheard of,
+neither BART nor PEGASUS have observed \emph{several} such tokens in a singular input batch during pre-training.
+Sentences are separated simply by the tokens of punctuation symbols.
+PEGASUS' tokenizer \emph{does} possess a special token for newlines~\parencite[11336]{pegasus},
+but this is done explicitly to be able to detect the separation of different paragraphs.%
+\footnote{See implementation notes of the \enquote{Mixed \& Stochastic} model here: \url{https://github.com/google-research/pegasus/tree/649a5978e45a078e1574ed01c92fc12d3aa05f7f\#results-update}}
+
+The self-evident solution to syntactically separate log messages in input data
+is to present models with special separators during training.
+Unfortunately, since we want to employ and evaluate pre-trained models for log summarization,
+this is not an option for us.
+
+Due to a lack of better alternatives, we use semicolons to separate
+log messages for BART models and either a semicolon or the newline-token to separate messages for PEGASUS models.
+This choice is backed up by a preliminary experiment we conducted in \autoref{sec:preliminary_separators}.
+
+Given that there does not seem to be a perfect solution to this problem,
+without previously training models to accept certain tokens as separators,
+we will abstain from evaluating a model's ability to insert line-breaks correctly
+between distinct log messages when evaluating its performance later on.
+
+\subsection{Respecting Input Size Limitations}\label{subsec:input_size_limitations}
+
+One of the inevitable design limitations of \ac{nlp} models based on the transformer architecture~\parencite{transformer}
+is a fixed maximum input size.
+For both the BART and PEGASUS models we use, this limit lies at 1024 tokens.
+As can be seen in \autoref{tab:other_domains_vs_log_datasets} on \autopageref{tab:other_domains_vs_log_datasets}
+this is enough for many domains such as news articles,
+where the average word count (which is proportional to the token count) is not that high.
+
+However, with our proposed summarization tasks, the maximum input limit is exceeded drastically on our datasets
+(the \hadoop{} and \telco{} datasets, more specifically).
+The usual approach also followed by BART and PEGASUS is to truncate documents
+at the model's maximum input size such that the remaining part is not considered for summarization.
+Fortunately, due to the nature of our summarization tasks, it is trivial to construct summaries for parts of a document;
+Hence we need not discard most of our input documents.
+
+We first determine the relevant log events according to the respective summarization task described in \autoref{sec:summarization_tasks}
+for the entire sequence we summarize.
+Following this, we can divide the log-data into chunks that will fit within the given maximum input length,
+respecting the boundaries of individual log messages,
+and construct a summary for each chunk by selecting the log messages linked to those events.
+If a chunk has no relevant log messages and the summary is therefore empty, we ignore that chunk for evaluation and training.
+Crucially, the relevant log events are determined for the entire document beforehand, not each chunk.
+
+As the tokenizer from PEGASUS uses a different vocabulary compared to BART's tokenizer,
+the boundaries where chunks are drawn differ slightly between models.
+This is problematic for direct comparison of the models on the summarization tasks.
+
+To circumvent this, we can use one model's tokenizer to select chunks for both models:
+BART's tokenizer always needs a few more tokens to represent the same log-data in all our observed cases,
+so if the input fits into a BART model, it will also fit into a PEGASUS model.
+We would like to emphasize that \emph{each model still uses its own tokenizer to process inputs}.
+BART's tokenizer is solely used to determine how to select chunks of input data that will fit into both models.
+While PEGASUS' maximum input limit is not always \emph{fully} utilized,
+it allows us to compare both models' performances as they are evaluated on identical inputs and reference summaries.
+
+However, we \emph{do} truncate individual log messages longer than \(\frac{1}{4}\) of the model's maximum input limit.
+Our reasoning is as follows:
+It is not meaningful to have the model summarize an individual log message;
+instead, we ensure that the model always receives some context
+by limiting the length of individual log messages.
+Furthermore, we would argue that
+long messages often convey less information relative to their length than multiple shorter log messages.
+This is because a log message usually only relates to a singular component of a system and denotes a singular event or system state.
+It is more important to consider multiple log messages than to fully consider every detail of a single message spanning multiple hundreds of tokens.
+
+\section{Perplexity and Cross-Entropy}\label{sec:perplexity}
+
+When training a \ac{nlp} model one needs a measure of the model's performance (\emph{loss function})
+in order to tweak model parameters with the goal of optimizing this measure.
+A widely-used choice is \emph{cross-entropy} or indirectly \emph{perplexity};
+both BART and PEGASUS optimize cross-entropy during all training-phases~\parencites[7872]{bart}[11336]{pegasus}.
+
+Cross-entropy understands a language model as a probability distribution \(\prob\) over a
+discrete set of tokens \(X\) forming the vocabulary of a language \(\mathcal{L}\).
+Given a known context of \(n\) preceding tokens \(t_0, \ldots, t_{n-1} \in X\),
+the language model tries to approximate the language by
+providing a probability distribution \(\prob(t_n | t_0, \ldots, t_{n-1})\) for the next token \(t_n \in X\).
+
+Given two probability distributions \(p, q\) their cross-entropy \(H\) is defined as
+\begin{equation}
+H(p, q) = - \sum p(x) \log_2 q(x)
+\end{equation}
+according to \citeauthor*{statistical_nlp}~\parencite[74]{statistical_nlp}.
+By interpreting a text sample of \(k\) tokens \(s_1, \ldots, s_k \in X\)
+as a probability distribution
+(where the probability of \(s_i\) given \(s_1, \ldots, s_{i-1}\) is 1 and for all other tokens \(t \neq s_i\) the probability is 0)
+the cross-entropy of a language model \(\prob\) on that sample can be defined as
+\begin{equation}
+\tilde{H}((s_1, \ldots, s_k); \prob) = - \sum_{i=1}^k \log_2 \prob(s_i | s_1, \ldots, s_{i-1})
+\end{equation}
+Normalizing this value by the length \(k\) of the text sample,
+results in a measure representing how \enquote{surprised} the language model is on average~\parencite[74]{statistical_nlp}.
+For practical applications, a lower cross-entropy tends to result in better performances but this is not necessarily the case:
+If the model simply grows confident for more obvious predictions (e.g. the letter at the beginning of a sentence is always capitalized)
+but fails to understand more sophisticated contexts,
+using cross-entropy as a loss function still rewards the model~\parencite[75]{statistical_nlp}.
+
+Perplexity \(\perplexity\) simply refers to the exponentiated normalized cross-entropy
+\begin{equation}
+\perplexity(\prob) = 2^{H_\text{norm.}(\prob)}
+\end{equation}
+Intuitively, if a model shows a perplexity of \(n\) this can be understood
+as the model being as surprised on average as if it had
+to guess between \(n\) equally probable tokens at each step~\parencite[78]{statistical_nlp}.
+
+The concept of cross-entropy can also be extended to bidirectional language models (such as BART and PEGASUS),
+which can additionally consider a fixed-size context of \(m\) subsequent tokens \(t_{n+1}, \ldots, t_{n+m} \in X\).
+Here, the model combines the probability distributions for preceding and subsequent tokens in a joint-probability distribution~\parencites[3]{deep_bidirectional_lm}[1758]{bidirectional_lm}.\\
+We use PyTorch's \verb+CrossEntropyLoss+%
+\footnote{\accessurl{https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html}{10.03.2022}},
+which is modified to be able to ignore arbitrary tokens,
+making it suitable for evaluating bidirectional language models such as BART and PEGASUS.
+This is helpful to ignore mask tokens during pre-training and any padding during both training phases.
+
+During both pre-training and fine-tuning
+we leverage the cross-entropy between the model output and the reference texts as a loss function to optimize.
+
+Furthermore, we sometimes use perplexity to evaluate the performance.
+Since cross-entropy and, by extension, perplexity are dependent on the model's vocabulary,
+perplexity cannot be compared between models using different vocabularies and tokenizers.
+Thus, when comparing model performances, we may use perplexity exclusively to
+compare models of the same architecture.
+
+\section{Text Generation via Beam-Search}\label{sec:beam_search}
+
+\citeauthor*{beam_search} introduced a fixed-width beam-search to neural text generation
+as a means to create a generalized model to produce an output sequence given another sequence as input, without specifying the length of outputs in advance~\parencite[11]{beam_search}.
+As well as enabling arbitrary lengths of generated output text,
+the beam-search also allows the language model to consider the text generated by itself thus far at each prediction step.
+% Furthermore input and output sequences are not required to align,
+% meaning that the model could for exmaple still consider the start of the input sequence
+% while generating near the end of the output sequence.
+
+Analogous to cross-entropy, beam-search understands a language model as a probability distribution \(\prob\) over a
+discrete set of tokens \(X\) forming the vocabulary of possible sequences.
+We make the simplification that input and output sequences use the same vocabulary,
+as is the case in our application.
+In a more generalized setting, beam-search is not limited to a singular vocabulary.
+Given a known context of \(n\) already generated tokens \(t_0, \ldots, t_{n-1} \in X\) and an input sequence \(i_0, \ldots, i_{m} \in X\),
+the language model provides a probability distribution \(\prob(t_n | t_0, \ldots, t_{n-1}; i_0, \ldots, i_{m})\) for the next token \(t_n \in X\).
+
+During a beach-search of fixed width \(W\),
+the most probable next tokens are determined
+using the language model and appended to the current predictions,
+similar to a greedy best-first search.
+Unlike the greedy search, the \(W\) most probable sequences, forming the set of \emph{beams} \(B\), are kept and updated:
+\begin{enumerate}
+\item For each beam \(b \in B\) the \(W\) most probable next tokens are determined.
+\item A new candidate is created for each of the \(W\) tokens by appending the token to the end of the beam \(b\).
+\item Only the \(W\) most probable candidates are kept and used as beams \(B\) for the next iteration step.
+\end{enumerate}
+Thus a beam-search with width \(W = 1\) is just a greedy best-first search,
+appending the most probable next token given the current prediction at each step.
+By increasing the width \(W\) of the beam-search, we can get sequences that are more likely overall
+but would not have been considered by a greedy search, as they were hidden behind the inclusion of a less likely token.
+
+In the end, the beam \(b \in B\) with highest score \(s\) is returned
+\begin{equation}
+s(b) = \frac{\log \prob(|b|)}{|b|}
+\end{equation}
+as described in \parencite[5]{beam_search}.
+
+Several extensions to the beam-search have been proposed to improve its performance for text generation,
+such as prohibiting the model from generating duplicated \(n\)-grams in order to increase quality of longer summaries~\parencite{beam_search_duplicate_ngram_removal},
+or introducing a length penalty parameter to gain better control of the length of the generated summary~\parencite[12]{beam_search_length_penalty}.
+
+The implementation provided by HuggingFace's \emph{Transformers}-library~\parencite{huggingface_transformers} we use,
+employs an exponential length penalty \(\delta\), such that:
+\begin{equation}
+s(b) =\frac{\log \prob(|b|)}{|b|^\delta}
+\end{equation}
+Thus \(\delta > 1\) encourages the model to predict longer sequences,
+while \(\delta < 1\) favors shorter outputs than the initially proposed method.
+Additionally a beam is deemed as complete, if the language model ever predicts an \ac{eos}-token as the next most probable token.%
+\footnote{See the implementation at: \url{https://github.com/huggingface/transformers/blob/3a71e94a929fae8c04bdad9129c461c920413a2d/src/transformers/generation_beam_search.py}}
+
+Parameters controlling the length of generated texts
+directly influence the quality of generated texts as perceived by different metrics.
+As such it becomes desirable to find optimal values for such parameters.
+
+In the context of machine learning, parameters like these
+which need to be specified by the user in order to maximize the utility of a learning algorithm,
+are known as \emph{hyperparameters}.
+They are generally used to configure the algorithm and may have notable effects on a model's performance~\parencite[1]{hyperparameter_search}.
+The process of finding hyperparameters that maximize a scoring-function is known as a \emph{hyperparameter serach}~\parencite[1]{hyperparameter_search}.
+Frameworks such as Optuna~\parencite{optuna} can be used to automatically perform such searches.
+
+During our experiments we use beam-search to generate text,
+and use the same number of beams as indicated by the original description of the models;
+5 for all BART-models and 8 for all PEGASUS-models~\parencites{bart}{pegasus}.
+We regularly employ small automatic hyperparameter searches using Optuna
+to find adequate values for the length penalty \(\delta\) described above.

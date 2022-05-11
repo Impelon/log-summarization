@@ -1,0 +1,6 @@
+{
+    "output-type": "common-events",
+    "category": ["950005001 -- cast+screen projection - abnormal disconnect"],
+    "time-property": "fault_time",
+    "time-range-ms": [0, 1000]
+}

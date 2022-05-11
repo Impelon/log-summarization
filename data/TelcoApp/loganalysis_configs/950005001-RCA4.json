@@ -1,0 +1,6 @@
+{
+    "category": ["RCA4", "950005001 -- cast+screen projection - abnormal disconnect"],
+    "partition-patterns": "^nl80211: Disconnect event",
+    "frame-patterns": "^CASTPLUS_DISCONNECT castScenario is",
+    "frame-time-range-ms": [null, 0]
+}

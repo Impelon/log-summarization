@@ -1,0 +1,3 @@
+[submodule "LogSummary"]
+	path = LogSummary
+	url = https://github.com/WeibinMeng/LogSummary

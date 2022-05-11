@@ -1,0 +1,5 @@
+{
+    "category": ["PageRank", "Normal"],
+    "group-by-columns": ["File"],
+    "partition-minimum-size": 200
+}

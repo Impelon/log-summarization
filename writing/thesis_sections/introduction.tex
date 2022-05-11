@@ -1,0 +1,102 @@
+\chapter{Introduction}\label{ch:introduction}
+
+\acresetall
+
+% All the reader needs to know to get introduced to the topic.
+% Motivate, state the problem and give a hint to your contribution.
+% What is this thesis about? Why is it interesting?
+% Give the reader a brief idea of the structure of the thesis. 1 to 3 pages.
+
+With today's complex, increasingly distributed and decentralized \ac{it} systems,
+it becomes more and more challenging to determine when a failure occurs
+and tougher still to decide what caused said failure.
+As such it is inevitable that systems fail from time to time.
+Fulfilling the high availability requirements of modern services
+makes it necessary to mitigate the impact of failures and resolve problems swiftly when they emerge.
+To achieve this it is vital to understand the causes and effects of a failure.
+However, manual investigations often require extensive system knowledge
+and thus substantial time investment by
+both developers and infrastructure operators.
+
+Computer-aided alternatives become a desirable solution.
+So called \ac{aiops} systems follow different automated approaches to aid system engineers
+in maintaining their systems;
+\emph{Anomaly detection} aims to identify potentially erroneous system states and failures,
+while automated \ac{rca} tries to determine the faults and error events that led to the failure.
+To investigate failures, \ac{aiops} systems autonomously gather and process information from different sources.
+
+One such information source are \emph{log files},
+which are text files where applications and operating systems inform about the system state.
+These are usually intended to be comprehensible to human operators
+and facilitate the process of debugging,
+allowing humans to gain insights into what went wrong~\parencite{log_analysis}.
+Still, it remains up to the system (specifically its developers) which information is logged in which way.
+Considering that logs are unstructured text files intended to be human-readable,
+containing important information about the system state that developers and operators can access~\parencite{log_analysis},
+they become increasingly difficult to analyze by humans with rising system complexity and logging volume.
+As logs contain rich information on the system state and events,
+yet much effort is needed to analyze them by hand, automatic solutions are becoming more popular.
+
+The focus we approach this problem with is different
+from most solutions towards facilitating log analysis:
+We aim to construct a program with the ability to extract the most impactful information
+from a segment of log-data.
+This is an approach we will refer to as \emph{log summarization}.
+
+To us it seems appealing to facilitate the process of summarizing logs,
+as summaries may prove useful anywhere where a human interacts with log-data:
+A user attempting to examine unexpected application behavior on their own,
+an \ac{aiops} system presenting its results to a human operator,
+or indeed a developer or operator performing an in-depth investigation of a system failure.
+In this regard, previous research found that providing a concise, easily-readable representation of logs can be helpful for human operators
+and substantially speeds up their ability to inspect and analyze logs manually~\parencite[11-12]{logassist}.
+
+Moreover, log-driven \ac{aiops} solutions will often
+aim to identify portions of the logs related to a failure
+and differentiate them from log-data generated under normal execution conditions.
+A model that summarizes log-data may also be capable of understanding which portions of its input contain important information,
+such as any unexpected system behavior observed.
+Thus, models solving the problem of log summarization may also be able to transfer their knowledge to other tasks of automated log analysis.
+
+Unfortunately, the unstructured nature of logs makes it hard for programs to handle log-data.
+As system developers write free-text portions in logs,
+we believe that applying methods that can understand the human language
+promises a high potential of gaining new insights,
+otherwise inaccessible by only focusing on the machine-readable parts of logs.
+
+Recent advances in \ac{nlp} have made it possible to train models that show a general understanding of human language~\parencites{bert}{bart},
+and models which generate near human-level summaries on vast datasets of news articles~\parencite[11335]{pegasus}.
+Additionally, current approaches quickly adapt to novel situations: \citeauthor*{pegasus} found
+their models beat previous state-of-the-art approaches on 6 out of 12 summarization datasets despite training with only 1000 examples~\parencite[11334]{pegasus}.
+% After conducting comparison experiments with human judges the authors of one such architecture (PEGASUS) find that
+% \textcquote[11335]{pegasus}{\textins{the models'} outputs were at least as good as the reference summaries in all \textins{studied} cases.
+% Even at low-levels of supervision \textelp{the model} was not measurably worse than human summaries on XSum and CNN/DailyMail.}
+% However studies examining past approaches found that models perform poorly on summarization tasks different from the initial dataset.
+% \citeauthor*{summarization_critical_evaluation} find that \textcquote[546]{summarization_critical_evaluation}{performance of \textelp{past} models is strongly affected by the layout bias of news corpora}.
+
+While there have recently been some attempts to summarize logs automatically~\parencites{log_summary}{logassist},
+large pre-trained \ac{nlp} models are yet to be studied in the domain of summarizing logs.
+The previous approach to textual summarization of log-data only considers \ac{nlp} models specialized in the domain of log-data,
+not benefiting from the generalized language understanding of pre-trained models.
+In addition, their approach is evaluated on segments of 20 log lines~\parencites{log_summary}.
+However, large-scale distributed systems can generate over 500 thousand~\parencites[126]{hdfs_dataset}[125]{logpai_logparser_benchmarks}
+or even 120 million~\parencites[1250]{cloud_diag} lines per hour.
+Thus, approaches should also be evaluated on longer inputs.
+
+We aim to contribute toward the goal of automated log analysis by generating summaries of log-data.
+Our contribution is threefold:
+\begin{itemize}[topsep=0pt,parsep=0pt]
+\item We propose two summarization tasks based on the idea of summarizing failures,
+      which can be applied to summarize sections of logs encompassing multiple hundreds of log-entries.
+\item We further tune pre-trained \ac{nlp} models and evaluate them on these novel summarization tasks,
+      as well as on a previously researched dataset containing human-written summaries of log data.
+      Our best-performing model outperforms the state-of-the-art framework \parencite{log_summary}
+      on these previously researched datasets.
+\item We highlight several challenges that arise when applying pre-trained language models to the domain of logs.
+\end{itemize}
+
+Going forward, this thesis is structured as follows:
+We first introduce the reader to the study of reliable systems and the concepts of \ac{nlp} in \autoref{ch:background}.
+In \autoref{ch:contribution} we lay out important aspects regarding our contribution and then present our approach to log summarization.
+We then extensively evaluate our approach in \autoref{ch:evaluation}, first introducing evaluation metrics and datasets, then detailing the experiments conducted.
+Finally, we discuss related work in \autoref{ch:related_work} and conclude this thesis in \autoref{ch:conclusion}.

@@ -1,0 +1,129 @@
+\let\origparident\parindent
+\setlength{\parindent}{0pt}
+
+{\LARGE
+\vspace*{2cm}
+\textbf{\thetitle}
+}
+
+\cleardoublepage
+
+\begin{minipage}[c][\textheight]{.7\textwidth}
+{\itshape
+I hereby declare that the thesis submitted is my own, unaided work, completed without any
+unpermitted external help. Only the sources and resources listed were used.
+\vspace{1em}
+}
+
+\begin{otherlanguage}{ngerman}
+Hiermit erkläre ich, dass ich die vorliegende Arbeit selbstständig und eigenhändig
+sowie ohne unerlaubte fremde Hilfe und ausschließlich unter Verwendung der aufgeführten
+Quellen und Hilfsmittel angefertigt habe.
+\vspace{2em}
+\end{otherlanguage}
+
+Berlin,
+
+\vspace{3em}
+\dotfill{}
+\end{minipage}
+
+
+\cleardoublepage
+
+\vspace*{2cm}
+
+{\Huge
+\textbf{\thetitle}
+}
+
+\vspace{2cm}
+
+{\large
+\textbf{\theauthor}
+}
+
+\vspace*{\fill}
+
+A thesis submitted to the\\
+\textbf{Faculty of Electrical Engineering and Computer Science}\\
+of the\\
+\textbf{Technical University of Berlin}\\
+in partial fulfillment of the requirements for the degree\\
+\textbf{Bachelor of Science} in \textbf{Computer Science}\\[1em]
+
+Berlin, Germany\\
+\thedate\\[1em]
+\includelogo{}
+
+\newpage
+
+\vspace*{\fill}
+
+Main supervisor:
+
+Prof. Dr. habil. Odej Kao, Technical University of Berlin\\[1em]
+
+Research advisor:
+
+Dr. Alexander Acker, Technical University of Berlin
+
+\begin{otherlanguage}{ngerman}
+\chapter*{\vspace{-2cm}Zusammenfassung}
+\thispagestyle{empty}
+
+\vspace{-0.5cm}
+
+% Kurze Zusammenfassung der Arbeit in 150-250 Wörtern.
+Das Verstehen und Eindämmung der Auswirkungen von Fehlern und Ausfällen ist ein unverzichtbarer Aspekt für den Betrieb moderner \Ac{it}-Infrastrukturen,
+jedoch macht es alleine der Umfang großer Systeme schwierig, Probleme festzustellen und nachzuvollziehen.
+Sogenannte Logdateien beinhalten beträchtliche Mengen an Informationen bezüglich des Zustandes eines Systems,
+allerdings erfordert eine manuelle Untersuchung erhebliche Zeitressourcen und ein fundiertes Verständnis vieler Komponenten;
+mit steigender Komplexität des Systems wird dies nicht leichter.
+Um diese Analyse zu vereinfachen, wird in dieser Arbeit die Verwendung vortrainierter Modelle zur Verarbeitung menschlicher Sprache vorgeschlagen,
+um Logdaten zusammenzufassen.
+Die Annahme ist, dass eine kompaktere Beschreibung der relevanten Ererignisse eine manuelle Untersuchung einer Logdatei beschleunigen kann,
+und dass solche Systeme einen besseren Überblick bieten können, wenn Benutzer mit Logdaten interagieren.
+Weiterhin werden zwei Verfahren zur halb-automatischen Generierung von Zusammenfassungen vorgestellt,
+um Datensätze zu entwickeln, auf denen Vorgehen zur Zusammenfassung von Logdaten ausgewertet werden können.
+Der vorgeschlagene Ansatz ist in der Lage, ein bisher existierendes System zur Zusammenfassung von Logdaten
+auf mehreren zuvor untersuchten Datensätzen zu übertreffen.
+Insgesamt ist eine durchschnittliche Steigerung der \acs*{rouge}-1 \(F_1\) Metrik um \(12\) Punkte zu beobachten.
+Dies zeigt, dass moderne Sprachverarbeitungsmodelle zumindest teilweise befähigt sind Logdaten zu verstehen,
+sodass sie in Zukunft Anwendung bei der Analyse von Logdateien finden können.
+\end{otherlanguage}
+
+\vspace{-1.5cm}
+
+{\let\cleardoublepage\relax \chapter*{Abstract}}
+\thispagestyle{empty}
+
+\vspace{-0.5cm}
+
+% Short version of the thesis in 150-250 words.
+Understanding and mitigating the impact of failures is essential to operating modern \ac{it} infrastructures,
+though their large scale alone makes it challenging to diagnose any problems.
+Logs supply crucial information on system state and behavior,
+but analyzing them manually requires substantial time investments and in-depth knowledge about the system;
+it becomes difficult for human operators to understand them with rising system complexity.
+To ease the analysis, we suggest using pre-trained \ac*{nlp} models to summarize logs
+and propose two summarization tasks to construct reference summaries from logs semi-automatically.
+We assume that a concise representation of the relevant events in a log speeds up the analysis conducted by human operators.
+Additionally, such summarization systems may provide a better overview anywhere users interact with log-data.
+Our approach performs comparative to previous work on previously studied datasets for log summarization
+but outperforms it significantly on datasets the previous approach finds more difficult:
+Overall we achieve improved \acs*{rouge}-1 \(F_1\) scores of \(12\) points on average.
+This shows that current \acs*{nlp} models are at least in part able to transfer their knowledge to the domain of log-data;
+Thus, their application may prove helpful to future research regarding log analysis.
+
+\cleardoublepage
+
+\tableofcontents
+
+\newpage
+
+\listoffigures
+\listoftables
+\printacronyms[heading=chapter*, name=List of Acronyms]
+
+\setlength{\parindent}{\origparident}

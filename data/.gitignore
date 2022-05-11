@@ -1,0 +1,7 @@
+*
+!.gitignore
+*/**
+!*/
+!*/.gitignore
+!*/loganalysis_configs
+!*/loganalysis_configs/**

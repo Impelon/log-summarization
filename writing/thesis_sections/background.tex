@@ -1,0 +1,334 @@
+\chapter{Background}\label{ch:background}
+
+\acresetall
+
+% Necessary background for topic, in order to understand the problem, motivation and contribution.
+% Approximately 5 pages.
+
+\section{Reliability Engineering}
+
+% Rough outline:
+% Failures & Reliability
+% Failure Management
+% RCA
+
+Until the 1960s,
+the quality targets of a component could be deemed fulfilled
+if the component in question was free of defects and failures
+at the time of development or manufacturing~\parencite[1]{reliability_engineering}.
+
+But with rising complexity and costs of failure
+\textcquote[1]{reliability_engineering}{
+\textins*{t}he expectation today is that complex \textelp{} systems are not only
+\emph{free from defects and systemic failures} \textelp{} when they are put into operation \textelp{},
+but also \emph{perform the required function failure free} for a stated time interval}.
+% and \emph{have a fail-safe behavior in case of critical or catastrophic failures}.}
+
+This is where reliability engineering comes in:
+\begin{displaycquote}[1]{reliability_engineering}
+The purpose of \emph{reliability \textelp{} engineering} is to develop methods and tools to
+\emph{evaluate and demonstrate} reliability, maintainability, availability, and safety of components
+\textelp{},
+as well as to \emph{support} development and production engineers in \emph{building in} these characteristics.
+\end{displaycquote}
+We say a system experiences a \emph{failure}
+if it no longer performs its desired function and is thus in violation of its requirements~\parencite[3]{reliability_engineering}.
+
+A high \emph{availability} has long been an essential requirement to many \ac{it} systems, critical to their quality of service~\parencite{high_availability}.
+Formally, availability represents the probability that a system is able to provide its service correctly at any given point in time~\parencite{dependability}.
+According to \citeauthor*{reliability_engineering}~\parencite[9]{reliability_engineering}
+the average availability \(\bar{A}\) of a system corresponds to:
+\begin{equation}
+\bar{A} = \frac{\text{\acs*{mttf}}}{\text{\acs*{mttf}} + \text{\acs*{mttr}}}
+\end{equation}
+Thus main contributors to availability are \ac{mttf},
+the average duration of time after which a system is expected to fail, starting from an initial operational state,
+and \ac{mttr},
+the average duration of time needed to restore the system to the operational state without failure.
+
+Therefore, a desirable goal is to keep \ac{mttf} high by proactively prohibiting the occurrence of failures
+while lowering the \ac{mttr}, for example by mitigating the impact of a failure.
+
+One measure to achieve this is \ac{rca},
+as it is \textcquote[45]{root_cause_analysis}{designed to help
+identify not only what and how an \textins{undesired} event occurred, but also why it happened.
+Only when investigators are able to determine why an event or failure occurred will they be able
+to specify workable corrective measures that prevent future events of the type observed.}
+According to \citeauthor*{root_cause_analysis} \ac{rca} is a process involving the following steps:
+\begin{displaycquote}[46-48]{root_cause_analysis}
+\begin{enumerate}
+\item Data collection.
+\item Causal factor charting.
+\item Root cause identification.
+\item Recommendation generation and implementation.
+\end{enumerate}
+\end{displaycquote}
+The process of collecting data is the most time intensive,
+heavily influenced in its scope by the construction of the causal factor chart.
+Concurrently, investigators prepare and perform causal analyses,
+building a causal graph of events leading up to the failure,
+which later helps identify the major contributors to the unwanted event~\parencite[48]{root_cause_analysis}.
+
+\section{\Acl*{aiops} and Log Analysis}
+
+% Rough outline:
+% DevOps
+% AIOps and why it is relevant/benefits
+% Logs as an information source for AIOps
+% Relevance of NLP for log analysis
+
+% Software development can be classified into multiple phases:
+% \textcquote[4]{software_life_cycle}{Requirements Engineering, Architecting,
+% Design, Implementation, Testing, Software Deployment, and Maintenance.
+% Maintenance is the last stage of the software life cycle.
+% After the product has been released,
+% the maintenance phase keeps the software up to date with environment
+% changes and changing user requirements.}
+%
+% So-called \emph{agile development} has become popular in today's software world
+% due to rapidly changing requirements and the desire to keep planning risks low~\parencites[22]{software_life_cycle}
+
+Lying at the crossroads of development and operation,
+\emph{DevOps} has seen widespread adoption in the industry in recent years,
+actively embraced by Tech Giants such as Google or Amazon~\parencites[213]{application_lifecycle}[94]{devops}.
+DevOps is a concept which thrives on increased collaboration between the traditionally separate \ac{it} departments of development, quality assurance and operation~\parencite[94]{devops}.
+It can be understood as a paradigm
+where \ac{it} professionals from different backgrounds work as cross-functional teams
+as opposed to the conventional approach of independent functional silos~\parencites[94]{devops}[213]{application_lifecycle}.
+
+\citeauthor*{application_lifecycle} understand rapid software deployment in accordance with business needs
+as an explicit goal of the set of principles and practices laid out by DevOps.
+There is a strong focus that deployment of changes happen automatically,
+increasing the reliability of a system by design~\parencite[213]{application_lifecycle}.
+
+In operations, DevOps is focused with maintaining the stability and performance of a system.
+As such it employs \emph{logging} and monitoring frameworks and tools,
+that help to uncover and address potential problems before they affect customer experience~\parencite[97-98]{devops}.
+These commonly present operators with visual dashboards that display a summary of the overall system state
+and automatically alert administrators if further investigation and action is needed~\parencite{devops}.
+
+This is where recently the idea of \ac{aiops} has started to gain some interest,
+with the number of related publications published each year consistently rising~\parencites[38-39]{aiops_literature_review}[119]{aiops_trends}.
+As the concept of \ac{aiops} is still relatively young,
+there is not yet a widely agreed-upon definition of it~\parencites[40-41]{aiops_literature_review}[4]{aiops_challenges}.
+\begin{displaycquote}[4]{aiops_challenges}
+In general \textins{however}, \acs{aiops} is about empowering software and service engineers
+to \textelp{} build and operate services that are easy to support and maintain
+by using artificial intelligence and machine learning techniques.
+% The value of \acs{aiops} can be significant: ensuring high service quality and
+% customer satisfaction, boosting engineering productivity, and
+% reducing operational cost.
+\end{displaycquote}
+\begin{displaycquote}[14]{practical_nlp}
+Loosely speaking, \acl{ai} (\acs{ai}) is a branch of computer science
+that aims to build systems that require human intelligence.
+\end{displaycquote}
+
+\citeauthor*{aiops_literature_review} conducted a literature review of scientific and non-scientific work focused on \ac{aiops}~\parencite[41-42]{aiops_literature_review}.
+They point out several reported benefits of \ac{aiops}, among which:
+\begin{itemize}
+\item time saving; \ac{it} professionals can spend less time on routine monitoring
+      and more of it on innovative tasks
+\item improved collaboration between \ac{it} teams and other business units,
+      lowering the effort needed to gain an overall understanding of a problem
+\item faster investigation of potential problems,
+      thus predicting failures before they impact a service's quality (potentially longer \ac{mttf})
+\item automatization of \ac{rca} and suggestions of possible solutions, leading to shorter \ac{mttr}
+\end{itemize}
+Overall, \ac{aiops} has the potential to increase the reliability and availability of an \ac{it} system
+by helping to identify problems and
+providing options in the decision-making process~\parencite[1]{aiops_levels}.
+
+A significant amount of methods related to \ac{aiops} rely on logging systems as an information source~\parencite[116]{aiops_trends}.
+The \emph{analysis of logs} promises to provide great insights into a system's behaviors,
+as logs typically record detailed information about system state and any events influencing the system,
+enabling various diagnoses, from investigating performance bottlenecks to detecting security breaches~\parencites{log_analysis}[1]{logpai_logparser_benchmarks}.
+
+However, gathering information from logs remains challenging, as noted by \citeauthor*{log_analysis}~\parencite{log_analysis}.
+These are some of the identified challenges:
+\begin{itemize}
+\item A developer writes log messages in a particular context of the program source code,
+      which is lost in the log file, making them difficult to understand.
+\item Log messages from different system components may be interleaved in a single log file.
+\item Log volume may be excessive in large systems,
+      so it becomes impractical to record the management of \emph{every} resource, such as lock objects.
+\item Different components may use heterogeneous formatting for logging.
+\end{itemize}
+
+From the perspective of \ac{aiops},
+system administration can come in different levels of automatization and autonomy the \ac{ai} system,
+starting from a regular workflow where the computer is merely a non-intelligent actor executing the commands of a human operator (level 1),
+ranging over \ac{ai}-generated recommendations a human operator can choose to follow or ignore (level 2),
+all the way to \ac{aiops} systems that take actions on their own and can make self-determined changes to a system (level 5/6)~\parencite[5]{aiops_levels}.
+
+A system summarizing logs could be considered (part of) a level 2 \ac{aiops} system,
+providing a human operator with a condensed overview of what happened.
+Especially for operators trying to investigate system failures,
+this may help to get a better understanding of the situation
+and ease communication to other teams unfamiliar with the details of the problem.
+Altogether, providing a concise, easily-readable representation of logs can be helpful
+to drastically speed up the analysis of log-data by human operators~\parencite[11-12]{logassist}.
+
+However, applying methods of \acl{ai} is not straightforward,
+because most general-purpose logs represent unstructured text,
+written by and designed for humans in order to better understand the systems behavior.
+Free-text log messages cannot be simply converted into
+numerical representations a computer can reason upon~\parencite[57,60]{log_analysis}.\\
+Here is where the field of \acs*{nlp} can play a vital role in log analysis.
+
+\section{Natural Language Processing}
+
+% Rough outline:
+% What is NLP?
+% Supervision
+% What is a language model?
+% Self-Supervision (Pre-Training vs. Fine-Tuning)
+% Text processing in Machine Learning (Tokenization)
+% Seq2Seq & Transformers & Self-Attention
+% Summarization using Transformers
+
+\Ac{nlp} is \textcquote[4]{practical_nlp}{an area of computer science that deals with methods to analyze, model, and understand human language.}
+
+During the early years of \ac{nlp} (around the 1960s),
+research in this field was
+\textcquote[4-5]{statistical_nlp}{dominated by a \emph{rationalist} approach \textelp{,}
+characterized by the belief that a significant part of the knowledge
+in the human mind \textelp{} is fixed in advance.}
+As such, rule-based systems saw great application in \ac{nlp} and other research fields of artificial intelligence.
+Typically these had a lot of handcrafted knowledge and heuristics built into them~\parencites[5]{statistical_nlp}[14]{practical_nlp}.
+This situation is similar to that encountered in \emph{log analysis} even today,
+where domain knowledge and heuristics empower tools to provide more accurate and effective diagnoses~\parencite[57]{log_analysis}.
+
+In the past decades though, an empiricist approach to \ac{nlp} has gained traction,
+which \textcquote[5]{statistical_nlp}{suggests that we can learn the complicated and extensive structure of language
+by specifying an appropriate general language model,
+and then inducing the values of parameters by applying statistical, pattern recognition, and
+machine learning methods}.% to a large amount of language use.}
+
+Increasingly \ac{nlp} thus applies methods originating in the field of \ac{ml}~\parencite[14-15]{practical_nlp}:
+\begin{displaycquote}[15]{practical_nlp}
+The goal of \acs{ml} is to \enquote{learn} to perform tasks based on examples (called \enquote{training data})
+without explicit instruction.
+This is typically done by creating a numeric representation \textelp{} of the training data
+and using this representation to learn the patterns in those examples.
+\end{displaycquote}
+An area of \ac{ml} that has lately seen great success in diverse areas of \acl{ai} research is \emph{deep learning}~\parencites[1]{deep_learning}[16]{practical_nlp},
+which combines multiple parametric processing layers and updates internal parameters
+according to the optima of a given loss function.
+These models are able to learn from unstructured, large datasets and create representations of the underlying information~\parencite[1]{deep_learning}.
+% \textcquote[1]{deep_learning}{allows computational models that are composed of multiple processing layers to learn representations of
+% data with multiple levels of abstraction},
+% discovering \textcquote[1]{deep_learning}{intricate structure in large data sets by using the backpropagation algorithm to indicate
+% how a machine should change its internal parameters
+% that are used to compute the representation in each layer from the representation in the previous layer.}
+Conventional \acl{ml} methods
+require domain knowledge to extract structured data (\emph{features}) from raw data,
+which could be used as the numeric representation for a learning algorithm to work on.
+Unlike these, deep learning models can learn suitable representations automatically from training on raw data~\parencite[1]{deep_learning}.
+% \textcquote[1]{deep_learning}{be fed with raw data
+% and \textelp{} automatically discover the representations needed for detection or classification.}
+As \textcquote[22]{practical_nlp}{language is inherently complex and unstructured},
+deep learning architectures \textcquote[23]{practical_nlp}{have become the status quo in \acs{nlp}}.
+
+\paragraph{Language models}
+
+One central component of many modern \ac{nlp} approaches is to train a model
+to solve the task of language modeling,
+where the model is asked to predict the next word given a context of previous words.
+This is a well-studied problem for which statistical models can be developed.
+Implementations of such \emph{language models} are not usually bound to this specific task.
+They provide a probability distribution over the sequences of words of a language
+and can thus be applied to diverse \ac{nlp} tasks~\parencite[71,191]{statistical_nlp}.
+
+This concept can also be generalized to bidirectional language models,
+which are able to predict sequences of words missing in a given context of words,
+not just any subsequent words~\parencites{bert}[3]{deep_bidirectional_lm}[1758]{bidirectional_lm}.
+
+In \acl{ml}, one differentiates between \emph{unsupervised} learning algorithms,
+where the classification of an training example is unknown to an algorithm
+and it tries to understand the underlying patterns of the training data,
+and \emph{supervised} ones where the algorithm requires additional \emph{labels} for training,
+depicting the desired output for each particular input example~\parencites[232]{statistical_nlp}[15]{practical_nlp}.
+
+One advantage of using language models is that training can often be realized in an unsupervised manner,
+bypassing the requirement of a large corpus of labeled data that may be expensive to construct.
+A way to do this is to remove words randomly in a text and ask the model to guess which words are missing~\parencite{bert}.
+This style of learning approach is sometimes referred to as \emph{self-supervised}~\parencite[1]{self_supervised},
+as a model still requires knowledge about the desired output for each input example.
+However, the desired output is simply the text that was withheld from the model's input.
+Therefore the labels for the self-supervised training are provided by the unlabeled data itself.
+
+\citeauthor*{self_supervised_seq2seq} proposed using such self-supervised learning approaches to train a
+deep learning model and showed empirically that doing so significantly improves performance for supervised learning tasks
+compared to directly training a model on the same task~\parencite{self_supervised_seq2seq}.
+From the perspective of the broader field of artificial intelligence,
+this is an application of \emph{transfer learning},
+where knowledge is first gained in a certain domain or task but is then applied (effectively) to other problems related to the original task~\parencite[26]{practical_nlp}.
+It has now become standard practice to first \emph{pre-train} a large model with millions of parameters
+on a self-supervised language modeling task using a large corpus of unlabeled text data,
+with the assumption that it forms some generalized knowledge about language which it can
+then transfer on the actual \enquote{downstream} task after some supervised learning
+(\emph{fine-tuning})~\parencites{bert}{bart}{pegasus}.
+These models can be seen as semi-supervised learners,
+as they combine unsupervised pre-training on a large dataset with supervised fine-tuning on a smaller dataset~\parencites[16]{practical_nlp}{self_supervised_seq2seq}.
+
+\paragraph{Transformers}
+
+In recent years the \emph{transformer}-architecture~\parencite{transformer}
+introduced by \citeauthor*{transformer} has been a central part of research
+in the field of \ac{nlp} and \acl{ml} in general.%
+\footnote{The original article has been cited over 40000 times according to Google Scholar:
+\accessurl{https://scholar.google.de/scholar?cluster=2960712678066186980}{27.04.2022}}
+Open-access transformer-based models such as those provided by HuggingFace's \emph{Transformers}-library~\parencite{huggingface_transformers}
+can be accessed publicly and used in production systems.
+
+Traditionally transformer architectures follow
+a \ac{seq2seq}~\parencite{seq2seq} encoder-decoder structure,
+which combines an \emph{encoder},
+mapping input elements to internal continuous numerical vector representations,
+and an autoregressive \emph{decoder},
+generating output elements from internal vector representations and previous outputs.
+(The dependency on its previous outputs is what classifies the decoder as autoregressive.)
+Both components are separate language models mainly composed of
+several stacked multi-head self-attention layers~\parencite[2-3]{transformer}.
+
+For an in-depth explanation of the \emph{self-attention} mechanism
+and its role in the transformer architecture the reader is referred to the original article \parencite{transformer},
+but all in all it allows the transformer architecture to investigate words by their context~\parencite[25]{practical_nlp},
+while maintaining the possibility for direct dependencies between segments separated by longer text passages~\parencite[6]{transformer}.
+For many practical applications, self-attention layers exhibit a better computational complexity than the typical alternatives~\parencite[6-7]{transformer},
+allowing transformer models to be scaled up to bigger sizes with more layers and parameters than alternative deep learning architectures.
+
+Naturally it is impractical for deep learning methods to work on arbitrary text in the form of character sequences directly.
+Instead, inputs and outputs generated by a transformer model are numerical vectors called \emph{embeddings}~\parencite[5-6]{transformer}.
+Each \emph{token} in a model's vocabulary can be represented as a unique embedding
+and the embedding outputted by the decoder represents a probability distribution over the most probable subsequent tokens~\parencite[5]{transformer},
+making it a language model.
+In the context of \ac{nlp}, tokens often represent singular words or sentence components~\parencite[124]{statistical_nlp},
+but deep learning architectures need a fixed-size vocabulary and therefore need to be able to represent words not previously seen.
+More sophisticated approaches such as SentencePiece~\parencite{sentencepiece}
+allow words to be split into multiple tokens in a robust and unique manner~\parencite{subword_sentencepiece}.\\
+Transforming sequences of tokens from or into actual text sequences is usually handled by a \emph{tokenizer} separate from though related to the main transformer model~\parencite[41]{huggingface_transformers}.
+
+\paragraph{Summarization}
+
+One example of a typical \acl{seq2seq} task is \emph{summarization},
+where a model is given an input sequence (the document to summarize) and is expected to produce an output sequence (the summary).
+In some domains \emph{extracting} important sequences based on heuristics works well for writing summaries.
+For instance, when summarizing news articles,
+selecting the first three sentences (a heuristic known as Lead-3) forms an acceptable summary due to the layout bias present in news media~\parencites{summarization_critical_evaluation}.
+Nevertheless, summarization remains a challenging task in \ac{nlp},
+especially on datasets requiring \emph{abstractive} summarization,
+including novel words not present in the original document.
+Recent transformers have therefore significantly outperformed previous state-of-the-art models on many datasets~\parencites{bart}{pegasus}.
+
+BERTSum~\parencite{bertsum} represents one of the earliest applications of
+transformer-based models to summarization tasks.
+Based on a pre-trained bidirectional encoder (BERT~\parencite{bert} more specifically),
+it introduced both an extractive summarization model using a classification-network on top of the encoder,
+and an abstractive \acl{seq2seq} summarization model using an autoregressive decoder on top~\parencite[3733-3734]{bertsum}.
+
+Since then several \ac{seq2seq} transformer models have been proposed for abstractive summarization.
+Among the most performant ones are BART~\parencite{bart} and PEGASUS~\parencite{pegasus},
+both using architectures analogous to the \ac{seq2seq} transformer architecture described in \parencite{transformer},
+but with differing pre-training objectives.

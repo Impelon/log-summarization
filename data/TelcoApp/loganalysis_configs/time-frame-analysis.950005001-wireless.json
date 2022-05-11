@@ -1,0 +1,8 @@
+[
+    ["output-type", "window-stats"],
+    ["category", ["950005001 -- cast+screen projection - abnormal disconnect"]],
+    ["partition-patterns", "^nl80211: Disconnect event"],
+    ["partition-must-include-pattern"],
+    ["frame-patterns", "^CASTPLUS_DISCONNECT castScenario is"],
+    ["frame-time-range-ms", [null, 0]]
+]

@@ -1,0 +1,59 @@
+name: Build LaTeX documents
+
+on:
+  push:
+    branches: [main]
+    paths: ["writing/**"]
+  pull_request:
+    branches: [main]
+    paths: ["writing/**"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      working-directory: ./writing
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Gather documents
+        run: |
+          echo 'latex_documents<<EOF' >> $GITHUB_ENV
+          for path in {thesis,expose,experiment_protocol}.tex; do [[ -e $path ]] && echo $path >> $GITHUB_ENV; done
+          echo 'EOF' >> $GITHUB_ENV
+        working-directory: ${{env.working-directory}}
+
+      - name: Create latexmk configuration file
+        run: echo '$max_repeat=8' > latexmkrc
+        working-directory: ${{env.working-directory}}
+
+      - name: Compile documents
+        uses: xu-cheng/latex-action@v2
+        with:
+          # The LaTeX file(s) to be compiled
+          root_file: |
+            ${{ env.latex_documents }}
+          working_directory: ${{env.working-directory}}
+          args: -pdf -f -file-line-error -interaction=nonstopmode
+
+      - name: Commit files
+        if: always()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -f *.pdf
+          git commit -m "Automatically build compiled versions of documents"
+        working-directory: ${{env.working-directory}}
+
+      - name: Push changes
+        if: always()
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}

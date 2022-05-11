@@ -1,0 +1,5 @@
+{
+    "category": ["Normal"],
+    "group-by-columns": ["File"],
+    "partition-minimum-size": 200
+}

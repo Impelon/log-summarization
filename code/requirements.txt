@@ -1,0 +1,5 @@
+# log analysis / log parsing
+drain3==0.9.10
+# visualization / tracesviz
+matplotlib==3.3.4
+networkx==2.5.1

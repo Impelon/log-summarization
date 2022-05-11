@@ -1,0 +1,283 @@
+\chapter{Related Work}\label{ch:related_work}
+
+\acresetall
+
+% Related work.
+% Present state of research and applied solutions concerning the different aspects relevant to the thesis.
+% Discuss differences and similarities to other solutions to the given tackled problem.
+% Approximately 5 to 8 pages.
+
+Published research in the context of log summarization is sparse;
+however, more generally, log analysis is an active field of research,
+with literature presening and demonstrating the effectiveness of
+different approaches to gaining insights from logs.
+
+\paragraph{Log analysis}
+
+One fascinating application of log analysis is
+in the context of Computer Security, where it can present an important tool to
+detect and comprehend attacks on \ac{it} infrastructures.
+Systems such as HOLMES or HERCULE try to reconstruct the attack and detect different stages present in cyberattacks:
+Starting from the infiltration of the attacker into the system,
+the attacker gaining a foothold and escalating their privileges,
+up to the collection and extraction of sensitive information and potential cleanup operations.
+
+The HOLMES~\parencite{holmes} system detects ongoing attacks in real-time
+by correlating different system events that are extracted from logs,
+then using databases of common attack principles and causality rules to differentiate benign activities
+from an attack and present a high-level view of the attack in the form of a graph.
+For an event or action to be part of the attack,
+there must be dependencies between it and suspicious activities from other attack phases.
+
+HERCULE~\parencite{hercule} is based on the observation
+that attack-related events are highly correlated and dependent on each other
+but are usually not related to other benign activities.
+They build a graph of events, connecting log-entries through a multi-edge, denoting a set of predetermined binary features,
+like accesses to the same files and web resources, occurrence within a fixed time window, or requests directed at the same remote hosts.
+They then apply a \acl{ml} algorithm to collapse the multi-edged graph to a weighted graph
+and use community detection to identify communities of related activities.
+From these, communities of log-entries containing suspicious activities
+are identified as potential attacks and presented to the user.
+
+However, attack detection and reconstruction are only one possible use case where the investigation of log-data proves helpful.
+Log analysis is also widely-employed in \ac{it} operations more generally,
+not only related to attack detection and reconstruction~\parencite{log_analysis}.
+Similar to the reconstruction of an attack tracing anomalous events,
+automated \ac{rca} tries to identify the root-cause of a failure and any intermediate steps leading up to the failure.
+
+\citeauthor*{fes_cluster_logs} present a system which facilitates \ac{rca} in log-data.
+They identify sequences of log events that frequently occur in the log,
+cluster different sequences by the number of events they share,
+and construct a dependency graph of related log events
+by comparing the chronological order of the events in each cluster.
+Given a set of log events that indicate the presence of a failure,
+their approach identifies possible causes for these events by tracing the dependencies in the graph.
+Ultimately, this dependency graph is presented to a system expert,
+who can use the graph to perform an in-depth investigation of the root-cause~\parencite{fes_cluster_logs}.
+
+All these systems have in common that they present an overview of the problem
+(as a graph of related events) to a human operator.
+This is done to communicate the details of the problem, speed up the understanding of the problem and potential solutions~\parencites{holmes}{hercule},
+but also to facilitate further investigations~\parencite{fes_cluster_logs}.
+These dependency graphs can be interpreted as \emph{visual} summaries involving log-data of the studied problems.
+
+We believe \emph{textual} summarization models, such as the ones presented by us,
+could in the future enhance such visual summaries of log-data by further summarizing groups of log events,
+further lowering the effor required to swiftly form a genral understanding of the detected problem.
+
+\paragraph{Transformer-based approaches to log analysis}
+
+One of the first uses of transformer-based models for log analysis was presented by
+\citeauthor{logsy} with their NuLog and Logsy architectures.
+\emph{NuLog}~\parencite{nulog} represents a self-supervised algorithm for learning log templates and is hence a log parser.
+The key idea is to use \ac{mlm} to mask random words in a log message and
+instruct a transformer-based language model to predict the missing word.
+If the model guesses the word correctly, it is not a dynamic parameter and hence part of the template.
+NuLog outperforms Drain~\parencite{drain} and other previously studied log parsers in parsing accuracy,
+but also provides a numeric representation (\emph{embeddings}) for each log message.
+
+These numeric embeddings encode a log message as a whole and thus represent the semantic content of each message.
+If combined with a supervised binary classifier, this can yield a model for log-based \emph{anomaly detection},
+a log analysis task where one tries to identify which log-entries are not the result of a normal execution environment~\parencite{nulog}.
+Additionally, an unsupervised anomaly detection model is presented,
+which is based on the number of correctly predicted missing words in each log message:
+The assumption is that NuLog will not be able to predict the missing words in anomalous messages as well as in normal ones.
+
+Likewise, anomaly detection is the task where the \emph{Logsy}~\parencite{logsy} model was applied to.
+The idea is to produce numerical embeddings where normal log messages are close to each other
+while anomalous log messages are more distant.
+A spherical learning objective is used to train the model
+to place normal log messages close to the center of a sphere
+and other messages at large distances from this center point.
+This hypersphere is part of the same dimensional space as the embedding vectors,
+with the center point defined as 0.
+%An \emph{anomaly score} between 0 and 1, proportional to the embedding's Euclidean distance from the center,
+%is calculated and used in the spherical loss function.
+The embedding's Euclidean distance from the center is then used as the \emph{anomaly score} of a log message.
+In combination with a threshold \(\varepsilon\), this distance is used to classify the log message;
+Embeddings inside the hypersphere with radius \(\varepsilon\) are classified as normal while all other embeddings are not.
+
+During training, the model is presented log messages from the target system it is later applied on,
+and auxiliary log messages originating from different openly accessible log datasets.
+The messages from the target system are assumed to be mostly normal,
+while the auxiliary messages are anomalous by definition, because they do not originate from that system.
+Logsy can thus be trained as a supervised classifier, although the data from the target system does not need detailed labeling.
+Overall, with unsupervised training on one-fifth of the log
+Logsy achieves a recall of \(90\%\) while maintaining a precision of \(26\%\) on the BGL dataset,
+which is the most challenging among the 3 different previously studied log datasets.
+With the inclusion of \(2.1\%\) labeled training data from the BGL target, the precision improves drastically to \(89\%\),
+although the recall slightly decreases to \(72\%\).
+
+On the \hadoop{}-dataset our models could be interpreted as models for anomaly detection,
+though we did not evaluate them as such, because they generate arbitrary text.
+Hence we are not directly able to measure the overlap in terms of log-entries,
+although in practice the models usually reproduced the input log messages exactly,
+barring the correct separation between distinct log messages.
+However, from the examples we have seen with the full disk failure in the \hadoop{} dataset,
+even after supervised fine-tuning, our models may struggle to compete with the high precision and recall of Logsy.
+
+\Ac{seq2seq} models suffer from the problem that the expected outputs in an anomaly detection task can widely vary in length,
+making it challenging to find adequate hyperparameters.
+Though, these architectures still have an advantage over traditional classifiers,
+in that they are naturally able to consider the surrounding \emph{context} of a message to judge if it is important or not,
+while classifiers usually work on a line-by-line basis.
+This makes it possible for \ac{seq2seq} models to judge, if a log-entry is anomalous in a given context
+(e.g. it is anomalous for a network disconnection to happen during regular system operation,
+but it is a routine status indication when a device is reconnected to another network as a result of a user-request),
+however the usefulness of this depends on the granularity of the presented logs and the existence of appropriate datasets.
+If the log-data is too fine-grained and contains interleaving messages from widely different components,
+the context of a log message is not that meaningful, especially considering the input size limitations of current transformer models.
+
+\citeauthor{language_models_logging} undertake a study with different language models
+(including the transformer-based encoder BERT~\parencite{bert}) on log-data
+and use the model's internal embeddings for log anomaly detection~\parencite{language_models_logging}.
+
+They find that embeddings produced by models pre-trained on log-data are more useful for anomaly detection
+than when pre-trained on general-purpose text.
+However, they find that pre-training BERT on log-data alone does not consistently outperform
+the original BERT-model trained on large corpora of natural language texts.
+Furthermore, introducing more diverse log-data during pre-training can actually degrade the embeddings' quality.
+
+As opposed to \citeauthor*{language_models_logging}, we followed the advice from \parencite{dont_stop_pretraining}
+and did not pre-train a model from scratch:
+Even after previous training on general-purpose text,
+we observe that further pre-training transformer models on log-data can lower the cross-entropy loss on downstream tasks.
+Unfortunately this did not improve the summarization performance in our applications.
+
+Nevertheless, our results from fine-tuning alone,
+suggest that even general-purpose transformer models possess some knowledge transferable to the domain of log analysis.
+
+\paragraph{Summarization of logs}
+
+In the context of \emph{visual} log summarization
+\citeauthor{logassist} introduced their \enquote{log analysis IDE} \emph{LogAssist}~\parencite{logassist},
+which summarizes the information contained in logs and displays a condensed but expandable view to the user,
+which is 75.2\% to 93.9\% smaller than the raw logs~\parencite[7]{logassist}.\\
+LogAssist constructs workflows from logs, which group multiple related log-entries matching program-flow.
+Logs are first parsed into log events using Drain~\parencite{drain},
+then grouped by an ID (e.g. a thread-ID) and time-difference.
+Finally, redundant event sequences are condensed using \(n\)-gram modeling~\parencite[3-4]{logassist}.
+During a user study with 19 participants, they find that
+\textcquote[10-11]{logassist}{LogAssist provides, on average, a 42\% improvement in
+log analysis speed when compared to performing the same analysis on raw logs alone},
+thus demonstrating the need for effective tools to present log-data in a concise way to human operators.
+
+Contrary to our approach,
+LogAssist does not aim to generate a textual summary that includes important information from the logs
+but instead aims to provide users with a compact representation of logs that can be easily explored.
+We believe the \(n\)-gram modeling used to simplify redundant event sequences in their work
+could also be effectively applied as a preprocessing step for textual summarization,
+helping to produce condensed summaries in situations where important log events
+are duplicated many times such as in the \hadoop{}-dataset.
+
+\paragraph{Textual summarization of logs}
+
+\citeauthor{log_summary} apply existing concepts of \ac{nlp}
+in their open-access framework \emph{LogSummary}~\parencite{log_summary}
+to create textual summaries of log-data and are to our knowledge the first to do so in the context of a scientific publication.
+
+Furthermore they introduce \emph{LogIE},
+an information extraction framework for logs that is an integral part of LogSummary;
+LogIE combines log templates, a rule-based system and an information extraction framework \emph{OpenIE}
+to extract entity-relationship tuples from log messages.~\parencite[4]{log_summary}
+
+The rule-based system first extracts entity-value pairs using commonly occurring patterns in log-data,
+such as separator characters like colons between key-value pairs.
+Hence it would extract the entity-relationship triples (\verb+Severity+, \verb+is+, \verb+HIGH+)
+and (\verb+Reason+, \verb+is+, \verb+NetworkException+) from the log message:
+\begin{verbatim}
+Error transferring transaction to PersistanceManager!
+Will not retry transfer. Severity: HIGH, Reason=NetworkException
+\end{verbatim}
+Now OpenIE is applied to the remaining part of the message to extract further
+tuples of entities, events and their relations, like (\verb+Error+, \verb+transferring+, \verb+transaction+) and (\verb+Will not retry+, \verb+transfer+).
+
+LogSummary then leverages previous techniques to produce vector embeddings for each tuple and ranks them using TextRank~\parencite{textrank};
+the top-\(k\) tuples are selected as the summary.
+
+As we focus mainly on the application of pre-trained transformer models on log-data
+as opposed to creating a comprehensive framework for summarizing logs,
+LogSummary address some additional challenges with log summarization that we did not consider:
+\begin{enumerate}
+\item \emph{Accurate summaries:} As LogSummary is entirely an extractive summarization framework,
+      it does not suffer from some of the problems laid out in \autoref{sec:threats_to_validity};
+      Our abstractive models possess the ability to generate arbitrary text not present in the input documents,
+      but with that comes the challenge of keeping factual consistency.
+
+      LogSummary is less likely to write a factually inconsistent summary
+      as summaries are entirely made up of text segments present in the input data.
+\item \emph{High throughput requirements:} Large-scale distributed systems can generate over 500 thousand~\parencites[126]{hdfs_dataset}[125]{logpai_logparser_benchmarks}
+      or even 120 million~\parencites[1250]{cloud_diag} log-entries per hour.
+      As such, depending on the use case,
+      it may be necessary for log summarization methods to be able to process large amounts of log-data.
+
+      While LogIE can process several thousand lines of logs per second on a server \ac{cpu},
+      our models require several seconds or minutes to generate a summary for hundreds of log-entries on two deep-learning \acp{gpu}.
+      According to benchmarks conducted by HuggingFace transformer-based models may even run between 13 to 23 times slower on a \ac{cpu}.%
+      \footnote{\accessurl{https://medium.com/huggingface/benchmarking-transformers-pytorch-and-tensorflow-e2917fb891c2}{06.04.2022}}
+
+      Due to the self-attention mechanism, computation time scales quadratically with respect to input-size for transformer models~\parencite[6]{transformer}.
+      Furthermore, the computation time of the beam-search employed for generating text from a model's predictions scales with respect to the length of the text to generate~\parencite[5]{beam_search}.
+      In situations where relations between distant log-entries is less important, throughput can hence be significantly improved
+      by feeding models smaller portions of log-data at a time or asking for shorter summaries.
+
+      Numerous efforts exist to make transformer-based more time-efficient,
+      ranging from optimizations on \acp{cpu} halving computation times~\parencite{transformers_cpu_optimization},
+      using mixed precision for training and interference on \acp{gpu}
+      benefiting from higher throughput of operations~\parencite{nvidia_mixed_precision}
+      or approximating the self-attention mechanism at the core of transformers in a computationally more efficient way~\parencites{bigbird}{nystroemformer}.
+      Moreover, previous research found that smaller models may be trained to achieve similar results as larger versions~\parencites{distilbert}.
+
+      On the other hand, LogSummary uses TextRank to rank triples, which actually also exhibits
+      quadratic time complexity with respect to input size when used on a complete graph,%
+      % NOTE: Could not find good source for PageRank's complexity.
+      \footnote{A complete graph of \(n\) nodes is known to have \(\binom{n}{2} = \frac{n \cdot (n - 1)}{2}\) edges,
+      while the PageRank-based ranking method is known to have a time complexity of
+      \(\mathcal{O}(n + e)\) for a graph with \(n\) nodes and \(e\) edges.
+      It follows that \(\mathcal{O}(n + \binom{n}{2}) = \mathcal{O}(\binom{n}{2}) = \mathcal{O}(n \cdot (n - 1)) = \mathcal{O}(n^2)\) is the complexity on a complete graph.}
+      as is the case with LogSummary.
+      We hypothesize that LogSummary also slows down when scaled up to longer input data.
+
+      Ultimately, we do not expect transformer models to be faster than conventional algorithms in the near future.
+\item \emph{Prioritization of important messages:} Our proposed summarization tasks
+      discourage from changeing the order of events in the summary.
+      However, LogSummary explicitly approximates the importance of each summarized entry and
+      thus is able to construct summaries beginning with the most critical segments first.
+\item \emph{Removing redundancy in log-data:} Logs often contain multiple repetitions of similar log messages;
+      if one such message is part of the summary, other similar log messages may not be as important.
+      Our proposed summarization tasks do not remove redundant log-messages from summaries.\\
+      We notice this problem with the \hadoop{}-dataset,
+      where the disconnection from the network causes the repetition of the same group of log-entries over and over again,
+      leading to highly repetitive and unnecessarily long summaries.
+
+      LogSummary addresses this by simply removing duplicated entity-relationship tuples,
+      preventing repetition in summaries.
+\item \emph{Summarization within log messages:} By only extracting entity-relationship tuples from log-entries,
+      LogSummary also manages to summarize the contents of log messages, which our own summarization tasks do not take into consideration.
+
+      Though, as our results show, models fine-tuned on the \logsummary{}-dataset can also approximate
+      the extraction of entity-relationship tuples present in their manual summaries,
+      as exemplified in \autoref{tab:logsummary_bart_cnn_example} on \autopageref{tab:logsummary_bart_cnn_example},
+      and thus summarize the contents of individual messages.
+\end{enumerate}
+
+Last but not least, the team at Zebrium Inc.\ recently presented how they use OpenAI's transformer-based GPT-3~\parencite{gpt3} model
+for textual summarization of root cause reports on their platform~\parencite{zebrium_log_summary}.
+GPT-3 is a unidirectional language model with the objective of text completion,
+which has been scaled up 175 billion parameters; 10 times the size of any previous research models~\parencite{gpt3}.
+For comparison: \pegasus{-Large} uses 568 million parameters~\parencite[11329]{pegasus}.
+
+Using their existent unsupervised methods Zebrium first generate a root cause report,
+typically including 5 to 20 log events.
+They then write a specialized prompt for GPT-3 (including log messages from the report) that encourages
+the model to predict an expert's \enquote{plain English} description of what happened.
+The intended use case is to simplify a root cause report for users and operators that may not be fully familiar with the system.
+
+The examples they present are impressive in our opinion:
+Summaries show high fluency and are reported to be mostly factually consistent,
+despite not further fine-tuning GPT-3 and the model essentially performing \acl{zsl} summarization.
+
+As neither GPT-3 nor Zebrium's root cause reports are openly available,
+it is not possible for us to verify their results or to objectively contextualize their approach.
+Nonetheless, we believe their use of pre-trained transformer-based models for summarization of log-data in production-systems
+exemplifies that there is great potential for further research in the area of log summarization (including abstractive summarization) using \ac{nlp} methods.

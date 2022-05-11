@@ -1,0 +1,125 @@
+\documentclass[12pt,a4paper,twoside]{book}
+
+\usepackage[T1]{fontenc}
+\usepackage[ngerman,english]{babel}
+\usepackage[utf8]{inputenc}
+
+\usepackage{macros/general}
+\usepackage{macros/graphing}
+\usepackage{macros/programs}
+\usepackage{macros/tables}
+
+\usepackage{newtxtext}
+\usepackage{titling}
+\usepackage[font=footnotesize]{caption}
+\usepackage{subfig}
+\usepackage{titlesec}
+
+\usepackage{acro}[=version2]
+\acsetup{first-long-format=\itshape, extra-style=paren}
+
+\usepackage[backend=biber,bibencoding=inputenc,style=ieee]{biblatex}
+\addbibresource{references.bib}
+\renewcommand*{\bibfont}{\footnotesize}
+\let\keeppostnote0
+\newrobustcmd*{\postnotecite}{\let\keeppostnote1\cite}
+\AtEveryCitekey{\if\keeppostnote0\clearfield{postnote}\fi}
+\SetCiteCommand{\postnotecite}
+
+\usepackage{fnbreak}
+\usepackage[hang]{footmisc}
+\setlength{\footnotemargin}{1em}
+%\interfootnotelinepenalty=10000
+
+\newcommand{\includelogo}[1][width=30mm]{\IfFileExists{images/tu_logo.pdf}{\includegraphics[#1]{images/tu_logo}}{\includegraphics[#1]{example-image-16x9}}}
+
+\let\origdoublepage\cleardoublepage
+\renewcommand{\cleardoublepage}{\clearpage{\thispagestyle{empty}\origdoublepage}}
+
+\setlist[itemize,1]{label=\(\diamond\)}
+\setlist[itemize,2]{label=\(\circ\)}
+
+%% configure textarea
+\setlength{\oddsidemargin}{4.58mm}
+\setlength{\evensidemargin}{-4.92mm}
+\setlength{\textwidth}{15.95cm}
+\setlength{\textheight}{23.5cm}
+\setlength{\voffset}{-1.45cm}
+\setlength{\parskip}{1ex}
+
+%% options for floating objects
+\renewcommand{\floatpagefraction}{.75}
+\renewcommand{\textfraction}{.1}
+\renewcommand{\topfraction}{.8}
+\renewcommand{\bottomfraction}{.5}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+%% chapter title formatting
+\titleformat{\chapter}[display]{\raggedleft{}}{\fontsize{52}{63}\selectfont\bfseries\thechapter }{0.2cm}{\fontsize{32}{38.7}\selectfont}[]
+
+%% header formatting
+\renewcommand{\chaptermark}[1]{\markboth{\chaptername\ \thechapter.\ #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection.\ #1}}
+\usepackage{fancyhdr}
+\fancyhf[LEH,ROH]{\thepage}
+\fancyhf[REH]{{\footnotesize\nouppercase{\leftmark}}}
+\fancyhf[LOH]{{\footnotesize\itshape\nouppercase{\rightmark}}}
+\fancyhf[COF]{\rule{0.2cm}{0.0cm}}
+\fancyhf[CEF]{\rule{0.2cm}{0.0cm}}
+\renewcommand{\headrulewidth}{0pt}
+
+%% acronym definitions
+\DeclareAcronym{it}{short=IT, long=information technology, first-style=short}
+\DeclareAcronym{rca}{short=RCA, long=root cause analysis}
+\DeclareAcronym{ai}{short=AI, long=artificial intelligence}
+\DeclareAcronym{nlp}{short=NLP, long=natural language processing}
+\DeclareAcronym{ml}{short=ML, long=machine learning}
+\DeclareAcronym{seq2seq}{short=seq2seq, long=sequence-to-sequence, extra=model type}
+\DeclareAcronym{mlm}{short=MLM, long=masked language modeling}
+\DeclareAcronym{gsg}{short=GSG, long=gap sentences generation}
+\DeclareAcronym{aiops}{short=AIOps, long=artificial intelligence for IT operations, first-style=reversed}
+\DeclareAcronym{zsl}{short=ZSL, long=zero-shot learning}
+\DeclareAcronym{fsl}{short=FSL, long=few-shot learning}
+\DeclareAcronym{prezsl}{short=Pre+\acs*{zsl}, list=self-supervised pre-training \& \acl*{zsl}, long=self-supervised pre-training \& \ac{zsl}}
+\DeclareAcronym{prefsl}{short=Pre+\acs*{fsl}, list=self-supervised pre-training \& \acl*{fsl}, long=self-supervised pre-training \& \ac{fsl}}
+\DeclareAcronym{bos}{short=\texttt{BOS}, long=beginning of sequence, extra=referring to tokens for \acs{nlp} models}
+\DeclareAcronym{eos}{short=\texttt{EOS}, long=end of sequence, extra=referring to tokens for \acs*{nlp} models}
+\DeclareAcronym{sep}{short=\texttt{SEP}, long=separator, extra=referring to tokens for \acs*{nlp} models}
+\DeclareAcronym{rouge}{short=ROUGE, long=Recall-Oriented Understudy for Gisting Evaluation, extra=name of a metric used in text summarization}
+\DeclareAcronym{cpu}{short=CPU, long=central processing unit, first-style=short}
+\DeclareAcronym{gpu}{short=GPU, long=graphical processing unit, first-style=short}
+\DeclareAcronym{mttf}{short=MTTF, long=mean time to failure}
+\DeclareAcronym{mttr}{short=MTTR, long=mean time to recovery}
+
+\title{Summarizing Logs with\\[.4em]Pre-Trained Language Models}
+\author{Ovidiu Victor T\u{a}tar}
+\date{\origdate\printdate{10.05.2022}}
+
+\begin{document}
+
+\pagestyle{empty}
+\frontmatter
+\input{thesis_sections/front_matter.tex}
+\pagestyle{fancy}
+\mainmatter
+
+\input{thesis_sections/introduction.tex}
+
+\input{thesis_sections/background.tex}
+
+\input{thesis_sections/contribution.tex}
+
+\input{thesis_sections/evaluation.tex}
+
+\input{thesis_sections/related_work.tex}
+
+\input{thesis_sections/conclusion.tex}
+
+\newpage
+\pagenumbering{roman}
+
+\printbibliography
+
+\end{document}

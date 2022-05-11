@@ -1,0 +1,20 @@
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta}
+\usetikzlibrary{fit}
+\usetikzlibrary{positioning}
+\usetikzlibrary{scopes}
+\usetikzlibrary{shadows}
+\usetikzlibrary{shadings}
+\usetikzlibrary{shapes.misc}
+
+\tikzset{
+  systemdiagram/.style={
+    element/.style={draw, align=center, text width=.25\columnwidth, minimum height=3.5\baselineskip},
+    multiple/.style={double copy shadow={shadow xshift=1.25ex, shadow yshift=1.25ex}},
+    data/.style={element, fill=cyan!20},
+    process/.style={element, rounded rectangle, rounded rectangle arc length=60, fill=orange!30},
+    model/.style={element, chamfered rectangle, chamfered rectangle angle=30, chamfered rectangle corners={north west, north east}, chamfered rectangle xsep=1em, fill=green!20},
+    flow/.style={-{Latex}, very thick},
+    relation/.style={dashed},
+  },
+}

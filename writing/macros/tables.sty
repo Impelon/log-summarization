@@ -1,0 +1,16 @@
+\RequirePackage{booktabs}
+\RequirePackage{colortbl}
+\RequirePackage{tabularx}
+\RequirePackage{array}
+\RequirePackage{diagbox}
+\RequirePackage{longtable}
+\RequirePackage{xltabular}
+\RequirePackage{threeparttable}
+\RequirePackage{ragged2e}
+
+\newcommand{\cell}[2]{\multicolumn{1}{#1}{#2}}
+\newcommand{\h}[1]{\textbf{#1}}
+
+\newcolumntype{L}{>{\RaggedRight\arraybackslash}X}
+\newcolumntype{R}{>{\RaggedLeft\arraybackslash}X}
+\newcolumntype{C}{>{\Centering\arraybackslash}X}

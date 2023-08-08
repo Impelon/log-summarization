@@ -1,3 +1,10 @@
+## About
+
+This project aimed to investigate how good modern language models are at summarizing text from application logs.
+When compared to previous work [LogSummary](https://github.com/WeibinMeng/LogSummary), which used a complex pipeline based on TextRank,
+language models outperformed LogSummary on their own dataset with only a little fine-tuning.
+Skim through the [accompanying thesis](writing/thesis.pdf) for more details on the datasets, model architecture and results.
+
 ## Installation
 
 1.  clone the repository via

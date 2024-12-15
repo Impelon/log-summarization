@@ -9,7 +9,7 @@ Skim through the [accompanying thesis](writing/thesis.pdf) for more details on t
 
 1.  clone the repository via
     ```
-    git clone https://github.com/Impelon/log-rca-summarization.git
+    git clone https://github.com/Impelon/log-summarization.git
     ```
 2.  optionally use `virtualenv` to make a virtual environment for python-packages
 3.  open `code`-folder in terminal
